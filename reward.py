@@ -32,7 +32,7 @@ def reward(text, tokenizer, min_window=8, max_window=15, eps=1e-4, detox_engine=
     Returns
     -------
     torch.Tensor
-        Token-level reward.
+        Token-level reward of shape (num_tokens,) for text
 
     Raises
     ------
