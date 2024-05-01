@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 from googleapiclient import discovery
 import json
 import os
+import time
 
 load_dotenv()
 API_KEY = os.environ.get("PERSPECTIVE_API_KEY")
@@ -52,7 +53,7 @@ def process_response(text, perspective_response):
         else:
             text_to_score[text] = {attribute: attribute_score["summaryScore"]["value"]}
 
-    print(text_to_score)
+    # print(text_to_score)
     return text_to_score
 
 """
@@ -90,6 +91,8 @@ def call_perspective(text, span_annotations=False, attributes={"TOXICITY": {}}):
         'spanAnnotations': span_annotations,
         'requestedAttributes': attributes
     }
+    # to ensure API happiness
+    time.sleep(2)
 
     response = client.comments().analyze(body=request).execute()
     return process_response(text, response)
