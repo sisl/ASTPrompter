@@ -10,4 +10,4 @@ Applying [FineGrained RLHF](https://arxiv.org/pdf/2306.01693) to dialogue
 3. Install the requirements
 `pip3 install -r requirements.txt`
 4. Set up .env file with Perspective credential
-`echo PERSPECTIVE_API_KEY=insert your key here > .env` 
+`echo PERSPECTIVE_API_KEY="insert your key here" > .env` 
