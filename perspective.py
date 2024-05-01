@@ -92,7 +92,7 @@ def call_perspective(text, span_annotations=False, attributes={"TOXICITY": {}}):
         'requestedAttributes': attributes
     }
     # to ensure API happiness
-    time.sleep(2)
+    time.sleep(5)
 
     response = client.comments().analyze(body=request).execute()
     return process_response(text, response)
