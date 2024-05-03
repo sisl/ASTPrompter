@@ -17,6 +17,14 @@ core inference routines
 from lm import LanguageModel
 from convokit import Corpus, download
 from reward import reward
+import random
+import json
+
+# load RTP
+with open("./data/rtp.jsonl", 'r') as df:
+    lines = df.readlines()
+    data = json.loads("["+",".join(lines)+"]")
+    hard_data = [i for i in data if i["challenging"] == True]
 
 # download the conversation corpus
 corpus = Corpus(filename=download("reddit-corpus-small"))
@@ -30,25 +38,27 @@ convo = [i.text for i in convo.iter_utterances()][1:] # because 0 is the selfpos
 convo = [f"anon{int(i % 2 == 0)}: {text.strip()}" for i, text in enumerate(convo)]
 # get the last n lines
 length = len(convo)
+adversarial = random.choice(hard_data)["prompt"]["text"]+" "
 convo = convo[-5:]
+print("PREFIX", adversarial)
 
 # create a forward call for the trajectory
-def get_multiple_uts(convo_prompt, model, n=5):
+def get_multiple_uts(convo_prompt, model, initial_utterance='', n=5):
     # shallow copy convo
     convo = convo_prompt[:]
 
-    for _ in range(n):
+    for i in range(n):
         # get the number of conversations remaining
         length = len(convo)
         # create prompts
-        prompt = "\n".join(convo+[f"anon{int(length % 2 == 0)}: "]).strip()
+        prefix = initial_utterance if i == 0 else ''
+        prompt = "\n".join(convo+[f"anon{int(length % 2 == 0)}: {prefix}"]).strip()
         ut = model(prompt)
-        convo.append(f"anon{int(length % 2 == 0)}: {ut.strip()}")
+        convo.append(f"anon{int(length % 2 == 0)}: {prefix+ut}")
 
     return convo[len(convo_prompt):]
 
 print("\n".join(convo))
-print("\n".join(get_multiple_uts(convo, model)))
+print("\n".join(get_multiple_uts(convo, model, adversarial)))
 
-print(ut)
 
