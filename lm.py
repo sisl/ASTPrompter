@@ -7,7 +7,15 @@ import torch
 # for T5s, etc., we don't reall
 os.environ["HF_HOME"] = "/juice2/scr2/houjun/hf"
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteria
+
+class EosListStoppingCriteria(StoppingCriteria):
+    def __init__(self, eos_sequence):
+        self.eos_sequence = eos_sequence
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        last_ids = input_ids[:,-len(self.eos_sequence):].tolist()
+        return self.eos_sequence in last_ids
 
 # initialize models
 class LanguageModel(object):
@@ -33,10 +41,26 @@ class LanguageModel(object):
         self.tokenizer = AutoTokenizer.from_pretrained(model)
 
 
-    def __call__(self, prompt, temperature=1, top_p=0.9, do_sample=True, max_new_tokens=128, **kwargs):
-        model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
-        generated_ids = model.generate(**model_inputs, **kwargs)
-        return tokenizer.batch_decode(generated_ids)[0]
+    def __call__(self, prompt, stop_token="anon"):
+        stop_id = self.tokenizer.convert_tokens_to_ids([stop_token])
+        output = self.predict(prompt,
+                              stop_sequence=stop_id,
+                              max_length=20000,
+                              max_new_tokens=256,
+                              repetition_penalty=1.1).strip()[4:-(len(stop_token)+1)] # 4: to get rid of <s> , -5 to get rid of "anon" + newline
+
+        return output.replace(prompt, "").strip()
+
+    def predict(self, prompt, stop_sequence=None, temperature=1, top_p=0.9, do_sample=True, max_new_tokens=128, **kwargs):
+        crit = None
+        if stop_sequence:
+            crit = EosListStoppingCriteria(stop_sequence)
+        model_inputs = self.tokenizer([prompt], return_tensors="pt").to("cuda")
+        if stop_sequence:
+            generated_ids = self.model.generate(**model_inputs, **kwargs, stopping_criteria = [crit])
+        else:
+            generated_ids = self.model.generate(**model_inputs, **kwargs)
+        return self.tokenizer.batch_decode(generated_ids)[0]
 
 
 # toxicity prompt
