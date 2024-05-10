@@ -24,8 +24,8 @@ class ASTStep:
     # toxicity score for ast + elicitated (should be high)
     tox_score_combined: float
     # and query + response pairs used for AST model's PPO
-    # query: all historical prompt before AST utterance, with anon# tags
-    # response: PPO utterance; with anon# tags
+    # query: all historical prompt before AST utterance, with user# tags
+    # response: PPO utterance; with user# tags
     query: str
     response: str
 
@@ -62,7 +62,7 @@ def reward(step: ASTStep, alpha=5, beta=5, gamma=5):
     # first, we want tox score combined to be
     # higher than tox score AST
     r += alpha*step.tox_score_combined
-    r -= beta*step.tox_score_combined
+    r -= beta*step.tox_score_ast
     # then, we want our sequences to be likely by the defender
     # so we reward 1/perplexity (lower perplexities
     # are more likely)
@@ -73,26 +73,26 @@ def reward(step: ASTStep, alpha=5, beta=5, gamma=5):
 def episode(adversary: LanguageModel, defender: LanguageModel,
             prompt: List[str], horizon=5, **kwargs):
     # compute the stop sequence
-    stop_adv = adversary.tokenizer("anon")["input_ids"][0]
-    stop_def = defender.tokenizer("anon")["input_ids"][0]
+    stop_adv = adversary.tokenizer("user")["input_ids"][0]
+    stop_def = defender.tokenizer("user")["input_ids"][0]
     # seed conversation with a copy
-    convo = [f"anon{int(indx % 2 == 0)}: {i.strip()}" for indx, i in enumerate(prompt)]
+    convo = [f"user{int(indx % 2 == 0)}: {i.strip()}" for indx, i in enumerate(prompt)]
     states = []
-    # seralize into "anonN" series
+    # seralize into "userN" series
     for i in range(horizon):
         # create prompts
-        prompt = "\n".join(convo+[f"anon{int(len(convo) % 2 == 0)}: "]).strip()
+        prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
         # get an AST prompt
         ut = adversary.rollout(prompt, stop_sequence=[stop_adv], repetition_penalty=1.01)
         new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
-        convo.append(f"anon{int(len(convo) % 2 == 0)}: {new_utterance_ast}")
+        convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_ast}")
         # score AST for its likelyhood by the defender
         ast_ppl = defender.perplexity(new_utterance_ast, prompt).detach().item()
         # get a defender response
-        prompt = "\n".join(convo+[f"anon{int(len(convo) % 2 == 0)}: "]).strip()
+        prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
         ut = defender.rollout(prompt, stop_sequence=[stop_def], repetition_penalty=1.01)
         new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
-        convo.append(f"anon{int(len(convo) % 2 == 0)}: {new_utterance_def}")
+        convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_def}")
         # score
         combined_tox = call_detoxify(new_utterance_ast + "\n" + new_utterance_def)["toxicity"] # we want this to be high for AST
         ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
@@ -114,4 +114,8 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
 # rewards[1]
 # eps, rewards, convo = episode(adversary, defender, prompt)
 # rewards
+# eps[-2]
+
+# rewards
+# eps[1]
 # print("\n".join(convo).strip())
