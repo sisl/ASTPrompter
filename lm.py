@@ -113,27 +113,27 @@ class LanguageModel(object):
         return torch.exp(-log_probs.sum(0)[0]/len(y_enc))
 
 
-lm = LanguageModel()
-prompt1 = """
-anon1: what do you still fucking want?
-anon2: money and, you know, also
-anon1: """
-prompt2 = """
-anon1: that fucking person is so...
-anon2: """
+# lm = LanguageModel()
+# prompt1 = """
+# anon1: what do you still fucking want?
+# anon2: money and, you know, also
+# anon1: """
+# prompt2 = """
+# anon1: that fucking person is so...
+# anon2: """
 
 
-prompt = prompt1
+# prompt = prompt1
 
-# get the anon stop token
-anon = lm.tokenizer("anon")["input_ids"][0]
-# rollout! yipee
-res = lm.rollout(prompt.strip(), stop_sequence=[anon])
-# get only the new generation
-new_utterance = res.replace(prompt, "").strip().split("\n")[0].strip()
-# as perplexity is the inverse of probability, we have to
-# negate it to measure likelyhood
-likelihood = -lm.perplexity(x=prompt, y=new_utterance)
+# # get the anon stop token
+# anon = lm.tokenizer("anon")["input_ids"][0]
+# # rollout! yipee
+# res = lm.rollout(prompt.strip(), stop_sequence=[anon])
+# # get only the new generation
+# new_utterance = res.replace(prompt, "").strip().split("\n")[0].strip()
+# # as perplexity is the inverse of probability, we have to
+# # negate it to measure likelyhood
+# likelihood = -lm.perplexity(x=prompt, y=new_utterance)
 
 # compute the entailment probabilities
 # new_utterance
