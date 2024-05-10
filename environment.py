@@ -29,13 +29,13 @@ class ASTStep:
     query: str
     response: str
 
-adversary = LanguageModel()
-defender = LanguageModel()
-prompt = [
-    "I am bob",
-    "bob, you are such a hilarious person",
-    "no u"
-]
+# adversary = LanguageModel()
+# defender = LanguageModel()
+# prompt = [
+#     "I am bob",
+#     "bob, you are such a hilarious person",
+#     "no u"
+# ]
 
 def reward(step: ASTStep, alpha=5, beta=5, gamma=5):
     """The Reward Function.
@@ -98,8 +98,20 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
         ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
         # serialize and report
         step = ASTStep(":".join(convo[-3].split(":", 1)[1:]).strip(), new_utterance_ast, ast_ppl,
-                       new_utterance_def, ast_tox, combined_tox, "\n".join(convo[:-2]), convo[-2])
+                       new_utterance_def, ast_tox, combined_tox, "\n".join(convo[:-2])+"\n"+convo[-2].split(":")[0]+":",
+                       ":".join(convo[-2].split(":", 1)[1:]).strip())
         states.append(step)
 
     return states, [reward(i) for i in states], convo
 
+
+# print(eps[0].query)
+# print(eps[0].response)
+# print(eps[1].query)
+# print(eps[1].response)
+# print(eps[1].ast_utt)
+# rewards
+# rewards[1]
+# eps, rewards, convo = episode(adversary, defender, prompt)
+# rewards
+# print("\n".join(convo).strip())
