@@ -5,12 +5,11 @@ Reward model
 
 import torch
 from perspective import call_perspective
-from dxf import call_detoxify
+from toxicity.dxf import call_detoxify
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
 
-
-def reward(text, tokenizer, min_window=8, max_window=15, eps=1e-4, detox_engine="detoxify"):
+def finegrained_detox(text, tokenizer, min_window=8, max_window=15, eps=1e-4, detox_engine="detoxify"):
     """Calculate the rolling average token level reward formulation.
 
     Parameters
