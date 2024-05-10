@@ -44,7 +44,7 @@ class LanguageModel(object):
                                                     device_map="auto").to(DEVICE)
         self.tokenizer = AutoTokenizer.from_pretrained(model)
 
-    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, max_length=10000, do_sample=True, max_new_tokens=128, **kwargs):
+    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=128, **kwargs):
         """Rollout our policy until a stop sequence.
 
         Parameters
@@ -68,11 +68,11 @@ class LanguageModel(object):
         model_inputs = self.tokenizer([prompt], return_tensors="pt").to(DEVICE)
         if stop_sequence:
             generated_ids = self.model.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
-                                                temperature=temperature, top_p=top_p, max_length=max_length,
+                                                temperature=temperature, top_p=top_p,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens)
         else:
             generated_ids = self.model.generate(**model_inputs, **kwargs,
-                                                temperature=temperature, top_p=top_p, max_length=max_length,
+                                                temperature=temperature, top_p=top_p,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens)
         return self.tokenizer.batch_decode(generated_ids)[0]
 

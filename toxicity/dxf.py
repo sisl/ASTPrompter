@@ -5,10 +5,8 @@ DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device("mp
 MODEL = Detoxify('original', device=DEVICE)
 
 def call_detoxify(text):
-    res = MODEL.predict(text)["toxicity"]
-    return {
-        text: {"TOXICITY": res}
-    }
+    res = MODEL.predict(text)
+    return res
 
 
 
