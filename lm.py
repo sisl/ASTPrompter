@@ -44,7 +44,7 @@ class LanguageModel(object):
                                                     device_map="auto").to(DEVICE)
         self.tokenizer = AutoTokenizer.from_pretrained(model)
 
-    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=128, **kwargs):
+    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, max_length=10000, do_sample=True, max_new_tokens=128, **kwargs):
         """Rollout our policy until a stop sequence.
 
         Parameters
