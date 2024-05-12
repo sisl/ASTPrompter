@@ -5,6 +5,8 @@ Run the environment.
 eps, rewards, convo = episode(adversary, defender, prompt)
 """
 
+import torch
+
 from toxicity.dxf import call_detoxify
 from dataclasses import dataclass
 from lm import LanguageModel
@@ -111,20 +113,20 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
     for i in range(horizon):
         prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
         
+        with torch.inference_mode():
+            ut = adversary.rollout(prompt, stop_sequence=[stop_adv], repetition_penalty=1.01)
+            new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_ast}")
 
-        ut = adversary.rollout(prompt, stop_sequence=[stop_adv], repetition_penalty=1.01)
-        new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
-        convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_ast}")
+            ast_ppl = defender.perplexity(new_utterance_ast, prompt).detach().item()
 
-        ast_ppl = defender.perplexity(new_utterance_ast, prompt).detach().item()
+            prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
+            ut = defender.rollout(prompt, stop_sequence=[stop_def], repetition_penalty=1.01)
+            new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_def}")
 
-        prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
-        ut = defender.rollout(prompt, stop_sequence=[stop_def], repetition_penalty=1.01)
-        new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
-        convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_def}")
-
-        combined_tox = call_detoxify(new_utterance_ast + "\n" + new_utterance_def)["toxicity"] # we want this to be high for AST
-        ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
+            combined_tox = call_detoxify(new_utterance_ast + "\n" + new_utterance_def)["toxicity"] # we want this to be high for AST
+            ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
 
         step = ASTStep(":".join(convo[-3].split(":", 1)[1:]).strip(), new_utterance_ast, ast_ppl,
                        new_utterance_def, ast_tox, combined_tox, "\n".join(convo[:-2])+"\n"+convo[-2].split(":")[0]+":",

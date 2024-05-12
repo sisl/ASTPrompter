@@ -37,12 +37,19 @@ class LanguageModel(object):
         The prompt to infer with the LM.
     **kwargs: inference parameters.
     """
-    def __init__(self, model="openai-community/gpt2"):
-        self.model = AutoModelForCausalLM.from_pretrained(model,
-                                                    torch_dtype=torch.float32,
-                                                    # attn_implementation="flash_attention_2",
-                                                    device_map="auto").to(DEVICE)
-        self.tokenizer = AutoTokenizer.from_pretrained(model)
+    def __init__(self, model="openai-community/gpt2", dont_init=False):
+
+        # because huggingface accelerate / deepspeed may move the models
+        # we lazily initialize where we actually are by looking it up (see
+        # self.device) whenever we are asked. for now, we don't know
+        self.__device = None
+
+        if not dont_init:
+            self.model = AutoModelForCausalLM.from_pretrained(model,
+                                                        torch_dtype=torch.float32,
+                                                        # attn_implementation="flash_attention_2",
+                                                        device_map="auto").to(DEVICE)
+            self.tokenizer = AutoTokenizer.from_pretrained(model)
 
     def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, max_length=10000, do_sample=True, max_new_tokens=128, **kwargs):
         """Rollout our policy until a stop sequence.
@@ -55,7 +62,7 @@ class LanguageModel(object):
             Stop sequence to stop rollout.
         **kwargs
             Rollout sampling parameters.
-
+ 
         Returns
         -------
         str
@@ -65,16 +72,23 @@ class LanguageModel(object):
         crit = None
         if stop_sequence:
             crit = EosListStoppingCriteria(stop_sequence)
-        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(DEVICE)
+        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.device)
         if stop_sequence:
             generated_ids = self.model.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
                                                 temperature=temperature, top_p=top_p,
-                                                do_sample=do_sample, max_new_tokens=max_new_tokens)
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
         else:
             generated_ids = self.model.generate(**model_inputs, **kwargs,
                                                 temperature=temperature, top_p=top_p,
-                                                do_sample=do_sample, max_new_tokens=max_new_tokens)
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
         return self.tokenizer.batch_decode(generated_ids)[0]
+
+    @property
+    def device(self):
+        if not self.__device:
+            self.__device = next(self.model.parameters()).device
+
+        return self.__device
 
     def perplexity(self, y, x=""):
         """Obtain ppl(y|x) from the LM.
@@ -87,7 +101,7 @@ class LanguageModel(object):
         Parameters
         ----------
         x : str
-            The prompt.
+           The prompt.
         y : str
             The entailments from the prompt to calculate the probability of.
 
@@ -100,7 +114,7 @@ class LanguageModel(object):
         # combine the input and output and forward pass
         x_enc = self.tokenizer([x])["input_ids"][0]
         y_enc = self.tokenizer([y])["input_ids"][0]
-        model_inputs = torch.tensor([x_enc+y_enc]).to(DEVICE)
+        model_inputs = torch.tensor([x_enc+y_enc]).to(self.device)
         res = self.model(input_ids=model_inputs)["logits"].squeeze(0)
         res = F.log_softmax(res, dim=1)
 
