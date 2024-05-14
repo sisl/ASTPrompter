@@ -32,7 +32,6 @@ class Trainer:
 
         self.adversary = LanguageModel(dont_init=True)
         adversary_model = AutoModelForCausalLMWithValueHead.from_pretrained(config.model_name)
-        self.adversary.model = adversary_model
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
 
         # our defender can be initialized normally 
@@ -48,10 +47,15 @@ class Trainer:
 
 
         self.ppo = PPOTrainer(
-            model = self.adversary.model,
+            model = adversary_model,
             tokenizer = self.adversary.tokenizer,
             config = config
         )
+
+        # because the accelerator may move models to weird places, we 
+        # account for that
+        self.adversary.model = self.ppo.model
+        self.defender.model = self.ppo.accelerator.prepare(self.defender.model)
 
         self.horizon = horizon
 
@@ -119,13 +123,15 @@ class Trainer:
         
         # run the prompt
         eps, rewards, _ = episode(self.adversary, self.defender, prompt,
-                                  horizon=self.horizon)
+                                  horizon=self.horizon, device=self.ppo.accelerator.device)
         rewards = torch.tensor(rewards)
 
         # the environment has already prepared query and response
         # tensors for us. to edit that behavior, change the environment
         qs = [i.query for i in eps]
         rs = [i.response for i in eps]
+
+        print(eps[-1].ast_utt)
 
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]
@@ -135,7 +141,11 @@ class Trainer:
         stats = self.ppo.step([torch.tensor(i) for i in query_ids],
                               [torch.tensor(i) for i in response_ids],
                               list(rewards.unbind(0)))
-        self.ppo.log_stats(stats, {"query": qs, "response": rs}, rewards)
+
+        # we need to send rewards to cuda because ddp needs them on the
+        # same device for logging
+        self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
+                           rewards.to(self.ppo.accelerator.device))
 
 if __name__ == "__main__":
     accelerator_kwargs = {
@@ -148,8 +158,8 @@ if __name__ == "__main__":
     # make some mock data
     prompts = [
         ["WTF are you doing?"],
-        ["Who are you?", "You are such a numpty!"]
     ]
+
     dl = trainer.prepare(prompts)
 
     # train on a single line

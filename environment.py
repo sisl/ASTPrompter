@@ -114,14 +114,14 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
         prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
         
         with torch.inference_mode():
-            ut = adversary.rollout(prompt, stop_sequence=[stop_adv], repetition_penalty=1.01)
+            ut = adversary.rollout(prompt, stop_sequence=[stop_adv], repetition_penalty=1.05)
             new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
             convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_ast}")
 
-            ast_ppl = defender.perplexity(new_utterance_ast, prompt).detach().item()
+            ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
 
             prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
-            ut = defender.rollout(prompt, stop_sequence=[stop_def], repetition_penalty=1.01)
+            ut = defender.rollout(prompt, stop_sequence=[stop_def], repetition_penalty=1.05)
             new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
             convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_def}")
 
