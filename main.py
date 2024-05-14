@@ -48,7 +48,7 @@ if __name__ == "__main__":
                       accelerator_kwargs=accelerator_kwargs,
                       log_with="wandb",
                       tracker_project_name="ast",
-                      config_kwargs={
+                      tracker_kwargs={
                           "wandb": {
                               "entity": "jemoka", 
                               # comment the line below out to log
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     
     # good vibes time
     for epoch in range(args.epochs):
-        trainer.epoch(dl, epoch)
+        trainer.epoch(dl, epoch, log_every=10)
 
         epoch_rewards = []
 

@@ -116,26 +116,23 @@ class Trainer:
         # off to different processes, etc.
         return self.accelerator.prepare(dl)
 
-    def epoch(self, dataloader, id=""):
+    def epoch(self, dataloader, log_every=10):
         """Run an epoch of the data.
 
         Parameters
         ----------
         dataloader : torch.utils.data.DataLoader
             The dataloader you got from self.prepare.
-        id : Optional[str]
-            ID of this epoch for logging purposes.
+        log_every : Optional[int]
+            how often to log to wandb
         """
         
         rewards = None
         
         # this should be a batch of one, so we index
         # to get rid of the outer shell
-        for batch in dataloader:
-            rewards = self.step(batch[0])
-
-        # todo eval
-        logger.info(f"Done with epoch {id}; last mean reward {rewards}!")
+        for i, batch in enumerate(dataloader):
+            rewards = self.step(batch[0], log=(i % log_every == 0))
 
     def play(self, prompt):
         """self play to run the prompt
@@ -157,13 +154,15 @@ class Trainer:
 
         return eps, rewards, convo
 
-    def step(self, prompt):
+    def step(self, prompt, log=False):
         """Optimize our model by a single step.
 
         Parameters
         ----------
         prompt : List[str]
             The prompt to optimize!
+        log : bool
+            whether to log
         """
         
         # run the prompt
@@ -187,7 +186,8 @@ class Trainer:
 
         # we need to send rewards to cuda because ddp needs them on the
         # same device for logging
-        self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
-                           rewards.to(self.accelerator.device))
+        if log:
+            self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
+                            rewards.to(self.accelerator.device))
 
         return rewards.mean().detach().cpu().item()
