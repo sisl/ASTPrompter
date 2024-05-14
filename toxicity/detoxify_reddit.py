@@ -76,8 +76,10 @@ def jsonl_to_dict(fname):
             id2results[id] = json.loads(results)
     return id2results
 
-# download large conversation corpus
-corpus = Corpus(filename=download("reddit-corpus-small"))
-#score_corpus(corpus, 'detox_results.jsonl')
-id2results = jsonl_to_dict('detox_results.jsonl')
-corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.9})
+
+if __name__ == "__main__":
+    # download large conversation corpus
+    corpus = Corpus(filename=download("reddit-corpus-small"))
+    #score_corpus(corpus, 'detox_results.jsonl')
+    id2results = jsonl_to_dict('detox_results.jsonl')
+    corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.9})
