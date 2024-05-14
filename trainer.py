@@ -6,16 +6,19 @@ from transformers import AutoTokenizer
 from lm import *
 from environment import *
 import torch
+import os
 
 logger = get_logger("ast")
 
 class Trainer:
 
     def __init__(self,
-                 horizon=5,
+                 args,
                  model="openai-community/gpt2",
                  defense="openai-community/gpt2",
                  **kwargs):
+
+        horizon = args.horizon
 
         config = PPOConfig(
             model_name=model,
@@ -59,6 +62,27 @@ class Trainer:
 
         self.horizon = horizon
 
+        self.save_dir = os.path.join(args.save_dir,
+                                     f"ppo_model_{model.split('/')[-1]}")
+
+    @property
+    def accelerator(self):
+        return self.ppo.accelerator
+
+    def save(self, postfix=""):
+        """save the model, optionally with a postfix
+
+        Parameters
+        ----------
+        postfix : str
+            the postfix to save (i.e. if save name was this/here, postfix
+            will make it this/here_postfix)
+        """
+
+        self.ppo.save_pretrained((self.save_dir+("_"+postfix
+                                                 if postfix != ""
+                                                 else "").strip()))
+    
     def prepare(self, prompts):
         """Make a distributed dataset from stings for training.
 
@@ -90,7 +114,7 @@ class Trainer:
 
         # huggingface accelerate may ship the dataset
         # off to different processes, etc.
-        return self.ppo.accelerator.prepare(dl)
+        return self.accelerator.prepare(dl)
 
     def epoch(self, dataloader, id=""):
         """Run an epoch of the data.
@@ -103,14 +127,35 @@ class Trainer:
             ID of this epoch for logging purposes.
         """
         
+        rewards = None
         
         # this should be a batch of one, so we index
         # to get rid of the outer shell
         for batch in dataloader:
-            self.step(batch[0])
+            rewards = self.step(batch[0])
 
         # todo eval
-        logger.info(f"Done with epoch {id}".strip())
+        logger.info(f"Done with epoch {id}; last mean reward {rewards}!")
+
+    def play(self, prompt):
+        """self play to run the prompt
+
+        Parameters
+        ----------
+        prompt : List[str]
+            the prompt to evaluate on
+
+        Returns
+        -------
+        List[ASTStep], List[float], List[str]
+            Steps, rewards per step, conversation.
+        """
+        
+        # run the prompt
+        eps, rewards, convo = episode(self.adversary, self.defender, prompt,
+                                      horizon=self.horizon, device=self.accelerator.device)
+
+        return eps, rewards, convo
 
     def step(self, prompt):
         """Optimize our model by a single step.
@@ -123,15 +168,13 @@ class Trainer:
         
         # run the prompt
         eps, rewards, _ = episode(self.adversary, self.defender, prompt,
-                                  horizon=self.horizon, device=self.ppo.accelerator.device)
+                                  horizon=self.horizon, device=self.accelerator.device)
         rewards = torch.tensor(rewards)
 
         # the environment has already prepared query and response
         # tensors for us. to edit that behavior, change the environment
         qs = [i.query for i in eps]
         rs = [i.response for i in eps]
-
-        print(eps[-1].ast_utt)
 
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]
@@ -145,23 +188,6 @@ class Trainer:
         # we need to send rewards to cuda because ddp needs them on the
         # same device for logging
         self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
-                           rewards.to(self.ppo.accelerator.device))
+                           rewards.to(self.accelerator.device))
 
-if __name__ == "__main__":
-    accelerator_kwargs = {
-        # "cpu": True
-    }
-    # initialize accelerator once before??
-    acc = Accelerator(**accelerator_kwargs)
-    trainer = Trainer(accelerator_kwargs=accelerator_kwargs)
-
-    # make some mock data
-    prompts = [
-        ["WTF are you doing?"],
-    ]
-
-    dl = trainer.prepare(prompts)
-
-    # train on a single line
-    trainer.epoch(dl)
-    breakpoint()
+        return rewards.mean().detach().cpu().item()
