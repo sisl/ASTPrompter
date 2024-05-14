@@ -72,7 +72,7 @@ if __name__ == "__main__":
     
     # good vibes time
     for epoch in range(args.epochs):
-        trainer.epoch(dl, epoch, log_every=10)
+        trainer.epoch(dl, log_every=10)
 
         epoch_rewards = []
 
