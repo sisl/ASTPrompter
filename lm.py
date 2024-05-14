@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn.functional as F
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 # to point to where we already have mistral downloaded
 # TODO each cluster this needs to change for where huggingface
@@ -45,13 +46,14 @@ class LanguageModel(object):
         self.__device = None
 
         if not dont_init:
-            self.model = AutoModelForCausalLM.from_pretrained(model,
-                                                        torch_dtype=torch.float32,
-                                                        # attn_implementation="flash_attention_2",
-                                                        device_map="auto").to(DEVICE)
+            self.model = AutoModelForCausalLM.from_pretrained(model, torch_dtype=torch.float32)
+                                                        # attn_implementation="flash_attention_2",)
             self.tokenizer = AutoTokenizer.from_pretrained(model)
 
-    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, max_length=10000, do_sample=True, max_new_tokens=128, **kwargs):
+    def to(self, device):
+        self.model = self.model.to(device)
+
+    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, max_length=1024, do_sample=True, max_new_tokens=48, **kwargs):
         """Rollout our policy until a stop sequence.
 
         Parameters
@@ -73,12 +75,17 @@ class LanguageModel(object):
         if stop_sequence:
             crit = EosListStoppingCriteria(stop_sequence)
         model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.device)
+        # if we are using DDP, the model sits in a wrapper object which we have
+        # to untangle before generate
+        underlying = self.model
+        if isinstance(underlying, DDP):
+            underlying = self.model.module
         if stop_sequence:
-            generated_ids = self.model.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
+            generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
                                                 temperature=temperature, top_p=top_p,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
         else:
-            generated_ids = self.model.generate(**model_inputs, **kwargs,
+            generated_ids = underlying.generate(**model_inputs, **kwargs,
                                                 temperature=temperature, top_p=top_p,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
         return self.tokenizer.batch_decode(generated_ids)[0]
@@ -90,7 +97,7 @@ class LanguageModel(object):
 
         return self.__device
 
-    def perplexity(self, y, x=""):
+    def perplexity(self, y, x="", device=None):
         """Obtain ppl(y|x) from the LM.
 
         REMEMBER: LOWER IS BETTER!
@@ -104,6 +111,8 @@ class LanguageModel(object):
            The prompt.
         y : str
             The entailments from the prompt to calculate the probability of.
+        device : Optional[torch.device]
+            The device to push the model inputs.
 
         Returns
         -------
@@ -114,14 +123,14 @@ class LanguageModel(object):
         # combine the input and output and forward pass
         x_enc = self.tokenizer([x])["input_ids"][0]
         y_enc = self.tokenizer([y])["input_ids"][0]
-        model_inputs = torch.tensor([x_enc+y_enc]).to(self.device)
+        model_inputs = torch.tensor([x_enc+y_enc]).to(device if device else self.device)
         res = self.model(input_ids=model_inputs)["logits"].squeeze(0)
         res = F.log_softmax(res, dim=1)
 
         # isolate the output components' probabilities; remember that
         # the last token omponent is one token beyond y (i.e. the final autoregression
         # token, beyond our value y, so we discard that)
-        log_probs = torch.gather(res[-len(y_enc)-1:-1], 1, (torch.tensor(y_enc)).unsqueeze(1))
+        log_probs = torch.gather(res[-len(y_enc)-1:-1], 1, (torch.tensor(y_enc)).unsqueeze(1).to(device if device else self.device))
 
         # sum of logs probs is product of probs
         return torch.exp(-log_probs.sum(0)[0]/len(y_enc))
