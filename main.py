@@ -32,7 +32,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='AST Trainer')
     parser.add_argument('--epochs', type=int, default=1,
                         help='number of epochs to train')
-    parser.add_argument('--horizon', type=int, default=5,
+    parser.add_argument('--horizon', type=int, default=3,
                         help='horizon of each episode')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
