@@ -121,7 +121,7 @@ class LanguageModel(object):
         # isolate the output components' probabilities; remember that
         # the last token omponent is one token beyond y (i.e. the final autoregression
         # token, beyond our value y, so we discard that)
-        log_probs = torch.gather(res[-len(y_enc)-1:-1], 1, (torch.tensor(y_enc)).unsqueeze(1))
+        log_probs = torch.gather(res[-len(y_enc)-1:-1], 1, (torch.tensor(y_enc)).unsqueeze(1).to(self.device))
 
         # sum of logs probs is product of probs
         return torch.exp(-log_probs.sum(0)[0]/len(y_enc))

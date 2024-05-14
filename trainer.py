@@ -82,7 +82,7 @@ class Trainer:
 
 if __name__ == "__main__":
     accelerator_kwargs = {
-        "cpu": True
+        # "cpu": True
     }
     # initialize accelerator once before??
     acc = Accelerator(**accelerator_kwargs)
@@ -91,3 +91,4 @@ if __name__ == "__main__":
     # train on a single line
     trainer.step(["WTF are you doing?"])
     trainer.step(["Who are you?", "You are such a numpty!"])
+    breakpoint()
