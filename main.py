@@ -41,18 +41,20 @@ if __name__ == "__main__":
     # if we are CPU, we have to do it here BEFORE argparse
     accelerator_kwargs = {
         # "cpu": True
-        log_with = "wandb"
     }
 
     # initialize accelerator once before??
     trainer = Trainer(args,
                       accelerator_kwargs=accelerator_kwargs,
-                      save_dir=args.save_dir)
-    trainer.accelerator.init_trackers(
-        project_name="ast", 
-        config=dict(args),
-        init_kwargs={"wandb": {"entity": "jemoka", "disabled": "true"}}
-    )
+                      log_with="wandb",
+                      tracker_project_name="ast",
+                      config_kwargs={
+                          "wandb": {
+                              "entity": "jemoka", 
+                              # comment the line below out to log
+                              "mode": "disabled"
+                          }
+                      })
 
     # parcel out the last N samples as validation data
     # TODO sensible choices?
@@ -77,7 +79,7 @@ if __name__ == "__main__":
         # run the validation prompts and get mean reward
         for i in val_dl:
             # recall each has a batch size of 1
-            _, rew, _ trainer.play(i[0])
+            _, rew, _ = trainer.play(i[0])
             # tally the reward for averaging in the end
             epoch_rewards += rew
 
@@ -89,9 +91,6 @@ if __name__ == "__main__":
         # we still checkpoint every epoch
         if best_reward < epoch_reward:
             trainer.save("best")
+            best_reward = epoch_reward
         trainer.save("checkpoint")
-
-    ## TODO Validation? ##
-
-    # train on a single line
 
