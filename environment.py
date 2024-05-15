@@ -74,7 +74,7 @@ def reward(step: ASTStep, tox_threshold=0.5, terminal=False):
         # fairly constrained
         try:
             # to normalize it against the +1 reward
-            r += 1e-2*step.ast_ppl
+            r -= 1e-2*step.ast_ppl
         except ValueError:
             breakpoint()
 

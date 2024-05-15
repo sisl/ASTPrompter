@@ -192,7 +192,7 @@ class Trainer:
             stats = self.ppo.step([torch.tensor(i) for i in query_ids],
                                   [torch.tensor(i) for i in response_ids],
                                   list(rewards.unbind(0)))
-        except RuntimeError:
+        except RuntimeError as e:
             breakpoint()
 
         # we need to send rewards to cuda because ddp needs them on the
