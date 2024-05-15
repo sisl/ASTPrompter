@@ -153,10 +153,63 @@ class LanguageModel(object):
         # isolate the output components' probabilities; remember that
         # the last token omponent is one token beyond y (i.e. the final autoregression
         # token, beyond our value y, so we discard that)
-        log_probs = torch.gather(res[-len(y_enc)-1:-1], 1, (torch.tensor(y_enc)).unsqueeze(1).to(device if device else self.device))
+        cond_log_probs = torch.gather(res[:len(x_enc)], 1, (torch.tensor(x_enc)).unsqueeze(1).to(device if device else self.device))
+        all_log_probs = torch.gather(res[:-1], 1, (torch.tensor(x_enc+y_enc)[1:]).unsqueeze(1).to(device if device else self.device))
+
+        log_probs = all_log_probs.sum(0) - cond_log_probs.sum(0)
 
         # sum of logs probs is product of probs
-        return torch.exp(-log_probs.sum(0)[0]/len(y_enc))
+        return -log_probs[0]/len(y_enc)
+
+    def condition(self, y, x="", device=None):
+        """Obtain P(y|x) from the LM.
+
+        REMEMBER: LOWER IS BETTER!
+
+        In particular, we define P(y|x) as the sum of logprobs
+        of each individual element.
+
+        Parameters
+        ----------
+        x : str
+           The prompt.
+        y : str
+            The entailments from the prompt to calculate the probability of.
+        device : Optional[torch.device]
+            The device to push the model inputs.
+
+        Returns
+        -------
+        torch.Tensor: 1
+            The probability of y given x
+        """
+        
+        # combine the input and output and forward pass
+        x_enc = self.tokenizer([x])["input_ids"][0]
+        y_enc = self.tokenizer([y])["input_ids"][0]
+        model_inputs = torch.tensor([x_enc+y_enc]).to(device if device else self.device)
+        underlying = self.model
+        if isinstance(underlying, DDP):
+            underlying = self.model.module
+
+        res = self.model(input_ids=model_inputs)
+
+        if isinstance(res, tuple):
+            res = res[0].squeeze(0)
+        else:
+            res = res["logits"].squeeze(0)
+
+        res = F.log_softmax(res, dim=1)
+
+        # isolate the output components' probabilities; remember that
+        # the last token omponent is one token beyond y (i.e. the final autoregression
+        # token, beyond our value y, so we discard that)
+        cond_log_probs = torch.gather(res[:len(x_enc)], 1, (torch.tensor(x_enc)).unsqueeze(1).to(device if device else self.device))
+        all_log_probs = torch.gather(res[:-1], 1, (torch.tensor(x_enc+y_enc)[1:]).unsqueeze(1).to(device if device else self.device))
+
+        # sum of logs probs is product of probs
+        return all_log_probs - cond_log_probs
+
 
 
 # lm = LanguageModel()

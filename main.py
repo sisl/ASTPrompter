@@ -37,7 +37,7 @@ if __name__ == "__main__":
                         help='number of epochs to train')
     parser.add_argument('--horizon', type=int, default=4,
                         help='horizon of each episode')
-    parser.add_argument('--lr', type=float, default=1.41e-5,
+    parser.add_argument('--lr', type=float, default=1.41e-6,
                         help='learning rate')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
