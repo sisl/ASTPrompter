@@ -25,6 +25,7 @@ class Trainer:
             learning_rate=1.41e-5,
             mini_batch_size=horizon,
             batch_size=horizon,
+            kl_penalty="full",
             **kwargs
         )
 
