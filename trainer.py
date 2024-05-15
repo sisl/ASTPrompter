@@ -23,7 +23,7 @@ class Trainer:
 
         config = PPOConfig(
             model_name=model,
-            learning_rate=1.41e-6,
+            learning_rate=args.lr,
             mini_batch_size=horizon,
             batch_size=horizon,
             kl_penalty="full",

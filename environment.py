@@ -85,37 +85,6 @@ def reward(step: ASTStep, alpha=10, beta=3, gamma=0.0001):
 
     return r
 
-def reward_to_go(rewards, discount=0.9):
-    """Calculate reward-to-go given a series of rewards.
-
-    sum(l=k)^d r_l gamma^(l-k)
-
-    Parameters
-    ----------
-    rewards : List[float]
-        Rewards.
-    discount : float
-        Discount factor.
-
-    Returns
-    -------
-    List[float]
-        reward-to-go
-    """
-    
-    rtg = []
-
-    # we compute RTG backwards, by essentially
-    # computing the last term, and discounting it
-    # along the way as we add forwards
-    rolling_sum = 0
-
-    for i in reversed(rewards):
-        rtg.append(i+discount*rolling_sum)
-        rolling_sum = rtg[-1]
-
-    return list(reversed(rtg))
-
 def episode(adversary: LanguageModel, defender: LanguageModel,
             prompt_src: List[str], horizon=5, **kwargs):
     stop_adv = adversary.tokenizer("user")["input_ids"][0]

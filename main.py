@@ -26,17 +26,19 @@ convos = list(corpus.conversations.values())
 # because the front is the self-post on reddit)
 prompts = [[clean_utterance(j.text) 
             for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
-           for i in convos]
+            for i in convos]
 R.shuffle(prompts)
 
 # fire this puppy off 
 if __name__ == "__main__":
     # establish the arguments of this system
     parser = argparse.ArgumentParser(description='AST Trainer')
-    parser.add_argument('--epochs', type=int, default=1,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='number of epochs to train')
-    parser.add_argument('--horizon', type=int, default=5,
+    parser.add_argument('--horizon', type=int, default=4,
                         help='horizon of each episode')
+    parser.add_argument('--lr', type=float, default=1.41e-6,
+                        help='learning rate')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
     args = parser.parse_args()
@@ -82,13 +84,15 @@ if __name__ == "__main__":
         # run the validation prompts and get mean reward
         for i in val_dl:
             # recall each has a batch size of 1
-            _, rew, _ = trainer.play(i[0])
+            _, rew, convo = trainer.play(i[0])
             # tally the reward for averaging in the end
             epoch_rewards += rew
 
         # log!
         epoch_reward = sum(epoch_rewards)/len(epoch_rewards)
         trainer.accelerator.log({"validation_reward": epoch_reward})
+        print(f"reward: {epoch_reward}")
+        # print("\n".join(convo))
 
         # if we are at best epoch, save best weights, othrewise,
         # we still checkpoint every epoch
