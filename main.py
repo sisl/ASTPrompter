@@ -22,7 +22,7 @@ convos = list(corpus.conversations.values())
 
 # we only keep the last five utterances (and also discard the front
 # because the front is the self-post on reddit)
-prompts = [[j.text for j in list(i.iter_utterances())[1:][-5:]]
+prompts = [[j.text for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
            for i in convos]
 R.shuffle(prompts)
 
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='AST Trainer')
     parser.add_argument('--epochs', type=int, default=1,
                         help='number of epochs to train')
-    parser.add_argument('--horizon', type=int, default=3,
+    parser.add_argument('--horizon', type=int, default=5,
                         help='horizon of each episode')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
@@ -52,7 +52,7 @@ if __name__ == "__main__":
                           "wandb": {
                               "entity": "jemoka", 
                               # comment the line below out to log
-                              "mode": "disabled"
+                              # "mode": "disabled"
                           }
                       })
 

@@ -83,11 +83,13 @@ class LanguageModel(object):
         if stop_sequence:
             generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
                                                 temperature=temperature, top_p=top_p,
-                                                do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens, 
+                                                pad_token_id=self.tokenizer.eos_token_id)
         else:
             generated_ids = underlying.generate(**model_inputs, **kwargs,
                                                 temperature=temperature, top_p=top_p,
-                                                do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens, 
+                                                pad_token_id=self.tokenizer.eos_token_id)
 
         return self.tokenizer.batch_decode(generated_ids)[0]
 

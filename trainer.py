@@ -23,7 +23,7 @@ class Trainer:
 
         config = PPOConfig(
             model_name=model,
-            learning_rate=1.41e-5,
+            learning_rate=1.41e-6,
             mini_batch_size=horizon,
             batch_size=horizon,
             kl_penalty="full",
@@ -129,12 +129,10 @@ class Trainer:
             how often to log to wandb
         """
         
-        rewards = None
-        
         # this should be a batch of one, so we index
         # to get rid of the outer shell
         for i, batch in enumerate(dataloader):
-            rewards = self.step(batch[0], log=(i % log_every == 0))
+            self.step(batch[0], log=(i % log_every == 0))
 
     def play(self, prompt):
         """self play to run the prompt
@@ -181,11 +179,18 @@ class Trainer:
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]
         response_ids = self.adversary.tokenizer(rs)["input_ids"]
+    
+        # if the AST said nothing, don't run anything 
+        if 0 in [len(i) for i in response_ids]:
+            return
 
         # Run PPO step
-        stats = self.ppo.step([torch.tensor(i) for i in query_ids],
-                              [torch.tensor(i) for i in response_ids],
-                              list(rewards.unbind(0)))
+        try:
+            stats = self.ppo.step([torch.tensor(i) for i in query_ids],
+                                  [torch.tensor(i) for i in response_ids],
+                                  list(rewards.unbind(0)))
+        except RuntimeError:
+            breakpoint()
 
         # we need to send rewards to cuda because ddp needs them on the
         # same device for logging
@@ -199,4 +204,3 @@ class Trainer:
                                        r] for i,r in zip(eps, rewards_list)])
             self.accelerator.log({"debug/pairings": table})
 
-        return rewards.mean().detach().cpu().item()

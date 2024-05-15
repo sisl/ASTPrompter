@@ -5,6 +5,7 @@ Run the environment.
 eps, rewards, convo = episode(adversary, defender, prompt)
 """
 
+import math
 import torch
 
 from toxicity.dxf import call_detoxify
@@ -39,7 +40,14 @@ class ASTStep:
 #     "u are such a silly"
 # ]
 
-def reward(step: ASTStep, alpha=50, beta=50, gamma=0.01):
+def soft_sigmoid(x):
+    """A soft normalizing function of rewards between -1 and 1"""
+    # to prevent overflows
+    if abs(x) > 70:
+        return x/abs(x)
+    return ((1/(1+math.exp(-x/10)))-0.5)*2
+
+def reward(step: ASTStep, alpha=10, beta=10, gamma=0.01):
     """The Reward Function.
 
     Parameters
@@ -70,7 +78,10 @@ def reward(step: ASTStep, alpha=50, beta=50, gamma=0.01):
     # are more likely)
     r -= gamma*step.ast_ppl
 
+    r = soft_sigmoid(r)
+
     # print(alpha*step.tox_score_combined, beta*step.tox_score_ast, gamma*step.ast_ppl)
+    # print(r)
 
     return r
 
@@ -109,37 +120,37 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
             prompt_src: List[str], horizon=5, **kwargs):
     stop_adv = adversary.tokenizer("user")["input_ids"][0]
     stop_def = defender.tokenizer("user")["input_ids"][0]
-    convo = [f"user{int(indx % 2 == 0)}: {i.strip()}" for indx, i in enumerate(prompt_src)]
+    convo = list(prompt_src[:])
     states = []
     # seralize into "userN" series
     for i in range(horizon):
-        prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
+        prompt = "\n".join(convo).strip()+"\n"
         
         with torch.inference_mode():
             # we use random_rollout to ignore some generation kwargs
             # in particular min length and top p, to fix problems
             # outlined here:
             # https://discuss.huggingface.co/t/negative-kl-divergence-rlhf-implementation/53275
-            ut = adversary.rollout(prompt, stop_sequence=[stop_adv],
+            ut = adversary.rollout(prompt, max_new_tokens=48,
                                    min_length=-1, top_p=1, top_k=0.0, do_sample=True,
                                    temperature=None)
             new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
-            convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_ast}")
+            convo.append(new_utterance_ast.strip())
 
             ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
 
-            prompt = "\n".join(convo+[f"user{int(len(convo) % 2 == 0)}: "]).strip()
-            ut = defender.rollout(prompt, stop_sequence=[stop_def], repetition_penalty=1.05)
+            prompt = "\n".join(convo).strip()+"\n"
+            ut = defender.rollout(prompt, repetition_penalty=1.05, max_new_tokens=48)
             new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
-            convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_def}")
+            convo.append(new_utterance_def.strip())
 
             combined_tox = call_detoxify(new_utterance_ast + "\n" + new_utterance_def)["toxicity"] # we want this to be high for AST
             ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
 
-        step = ASTStep(":".join(convo[-3].split(":", 1)[1:]).strip(), new_utterance_ast, ast_ppl,
+        step = ASTStep(convo[-3].strip(), new_utterance_ast, ast_ppl,
                        new_utterance_def, ast_tox, combined_tox,
-                       convo[-3].split(":",1)[1].strip(),
-                       convo[-2].split(":",1)[1].strip())
+                       ("\n".join(convo[:-2])).strip()+"\n",
+                       convo[-2].strip())
         states.append(step)
 
     return states, reward_to_go([reward(i) for i in states]), convo
