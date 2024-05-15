@@ -170,6 +170,7 @@ class Trainer:
         # run the prompt
         eps, rewards, _ = episode(self.adversary, self.defender, prompt,
                                   horizon=self.horizon, device=self.accelerator.device)
+        rewards_list = rewards
         rewards = torch.tensor(rewards)
 
         # the environment has already prepared query and response
@@ -191,10 +192,11 @@ class Trainer:
         if log:
             self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
                             rewards.to(self.accelerator.device))
-            table = wandb.Table(columns=["prompt", "ast", "defense"],
+            table = wandb.Table(columns=["prompt", "ast", "defense", "reward"],
                                 rows=[[i.prompt_utt,
                                        i.ast_utt,
-                                       i.def_utt] for i in eps])
+                                       i.def_utt,
+                                       r] for i,r in zip(eps, rewards_list)])
             self.accelerator.log({"debug/pairings": table})
 
         return rewards.mean().detach().cpu().item()

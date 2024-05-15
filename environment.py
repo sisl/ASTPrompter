@@ -106,10 +106,10 @@ def reward_to_go(rewards, discount=0.9):
     return list(reversed(rtg))
 
 def episode(adversary: LanguageModel, defender: LanguageModel,
-            prompt: List[str], horizon=5, **kwargs):
+            prompt_src: List[str], horizon=5, **kwargs):
     stop_adv = adversary.tokenizer("user")["input_ids"][0]
     stop_def = defender.tokenizer("user")["input_ids"][0]
-    convo = [f"user{int(indx % 2 == 0)}: {i.strip()}" for indx, i in enumerate(prompt)]
+    convo = [f"user{int(indx % 2 == 0)}: {i.strip()}" for indx, i in enumerate(prompt_src)]
     states = []
     # seralize into "userN" series
     for i in range(horizon):
