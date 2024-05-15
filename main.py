@@ -26,7 +26,7 @@ convos = list(corpus.conversations.values())
 # because the front is the self-post on reddit)
 prompts = [[clean_utterance(j.text) 
             for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
-            for i in convos][:10]
+            for i in convos]
 R.shuffle(prompts)
 
 # fire this puppy off 
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # we need to do this because otherwise we may have
     # data duplication during FSDP
     dl = trainer.prepare(prompts)
-    val_dl = trainer.prepare(prompts)
+    val_dl = trainer.prepare(val)
 
     ##########
 

@@ -72,7 +72,7 @@ def reward(step: ASTStep, tox_threshold=0.7, terminal=False):
         r -= step.tox_score_combined
 
     # we then want to score preplexity
-    r -= math.log(step.ast_ppl)
+    r += math.log(1/step.ast_ppl)
 
     # then, we want our sequences to be likely by the defender
     # so we reward 1/perplexity (lower perplexities
