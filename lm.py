@@ -53,7 +53,7 @@ class LanguageModel(object):
     def to(self, device):
         self.model = self.model.to(device)
 
-    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=48, random_rollout=False, **kwargs):
+    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=48, **kwargs):
         """Rollout our policy until a stop sequence.
 
         Parameters
@@ -62,8 +62,6 @@ class LanguageModel(object):
             State to begin rollout at.
         stop_sequence : List[int]
             Stop sequence to stop rollout.
-        random_rollout : bool
-            ignore all arguments and rollout with default arguments
         **kwargs
             Rollout sampling parameters.
  
@@ -82,36 +80,14 @@ class LanguageModel(object):
         underlying = self.model
         if isinstance(underlying, DDP):
             underlying = self.model.module
-        if not random_rollout:
-            if stop_sequence:
-                generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
-                                                    temperature=temperature, top_p=top_p,
-                                                    do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
-            else:
-                generated_ids = underlying.generate(**model_inputs, **kwargs,
-                                                    temperature=temperature, top_p=top_p,
-                                                    do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
+        if stop_sequence:
+            generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
+                                                temperature=temperature, top_p=top_p,
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
         else:
-            if stop_sequence:
-                generated_ids = underlying.generate( 
-                        **model_inputs,
-                        stopping_criteria = [crit],
-                        min_length = -1, 
-                        top_k = 0.0,
-                        top_p = 1.0,
-                        max_new_tokens = max_new_tokens,
-                        do_sample = True,
-                        pad_token_id=self.tokenizer.eos_token_id)
-
-            else:
-                generated_ids = underlying.generate( 
-                        **model_inputs,
-                        min_length = -1, 
-                        top_k = 0.0,
-                        top_p = 1.0,
-                        max_new_tokens = max_new_tokens,
-                        do_sample = True,
-                        pad_token_id=self.tokenizer.eos_token_id)
+            generated_ids = underlying.generate(**model_inputs, **kwargs,
+                                                temperature=temperature, top_p=top_p,
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.eos_token_id)
 
         return self.tokenizer.batch_decode(generated_ids)[0]
 

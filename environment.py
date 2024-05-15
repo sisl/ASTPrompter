@@ -118,7 +118,9 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
             # in particular min length and top p, to fix problems
             # outlined here:
             # https://discuss.huggingface.co/t/negative-kl-divergence-rlhf-implementation/53275
-            ut = adversary.rollout(prompt, stop_sequence=[stop_adv], random_rollout=True)
+            ut = adversary.rollout(prompt, stop_sequence=[stop_adv],
+                                   min_length=-1, top_p=1, top_k=0.0, do_sample=True,
+                                   temperature=None)
             new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
             convo.append(f"user{int(len(convo) % 2 == 0)}: {new_utterance_ast}")
 
@@ -133,8 +135,9 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
             ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
 
         step = ASTStep(":".join(convo[-3].split(":", 1)[1:]).strip(), new_utterance_ast, ast_ppl,
-                       new_utterance_def, ast_tox, combined_tox, "\n".join(convo[:-2])+"\n"+convo[-2].split(":")[0]+":",
-                       ":".join(convo[-2].split(":", 1)[1:]).strip())
+                       new_utterance_def, ast_tox, combined_tox,
+                       convo[-3].split(":",1)[1].strip(),
+                       convo[-2].split(":",1)[1].strip())
         states.append(step)
 
     return states, reward_to_go([reward(i) for i in states]), convo
@@ -169,6 +172,12 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
 # rewards
 # rewards[1]
 # eps, rewards, convo = episode(adversary, defender, prompt)
+# print("\n".join(convo).strip())
+# print(rewards)
+# eps[0]
+# [0.11950005648762163, 0.0858364713165384, 0.06110428231269696, 0.1816855879793982, 0.27232840544270154]
+# eps[4]
+
 # eps
 # rewards
 # rewards
@@ -176,4 +185,3 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
 
 # rewards
 # eps[1]
-# print("\n".join(convo).strip())
