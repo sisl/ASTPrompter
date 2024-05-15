@@ -7,6 +7,7 @@ from trainer import Trainer
 
 import random
 import argparse
+import json
 
 from accelerate.logging import get_logger
 
@@ -15,6 +16,8 @@ logger = get_logger("ast")
 # fix random sede for reproducibility
 R = random.Random(24)
 
+
+"""
 # load our initial corpus ahead of time
 corpus = Corpus(filename=download("reddit-corpus-small"))
 id2results = jsonl_to_dict('detox_results.jsonl')
@@ -27,6 +30,12 @@ convos = list(corpus.conversations.values())
 prompts = [[clean_utterance(j.text) 
             for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
             for i in convos]
+"""
+with open("realtoxicityprompts-data/prompts.jsonl", 'r') as df:
+    lines = df.readlines()
+    data = json.loads("["+",".join(lines)+"]")
+    prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
+
 R.shuffle(prompts)
 
 # fire this puppy off 
@@ -100,4 +109,3 @@ if __name__ == "__main__":
             trainer.save("best")
             best_reward = epoch_reward
         trainer.save("checkpoint")
-
