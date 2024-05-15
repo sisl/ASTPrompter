@@ -39,7 +39,7 @@ class ASTStep:
 #     "u are such a silly"
 # ]
 
-def reward(step: ASTStep, alpha=5, beta=5, gamma=5):
+def reward(step: ASTStep, alpha=50, beta=50, gamma=0.01):
     """The Reward Function.
 
     Parameters
@@ -68,7 +68,9 @@ def reward(step: ASTStep, alpha=5, beta=5, gamma=5):
     # then, we want our sequences to be likely by the defender
     # so we reward 1/perplexity (lower perplexities
     # are more likely)
-    r += gamma*(1/step.ast_ppl)
+    r -= gamma*step.ast_ppl
+
+    # print(alpha*step.tox_score_combined, beta*step.tox_score_ast, gamma*step.ast_ppl)
 
     return r
 
