@@ -26,7 +26,7 @@ convos = list(corpus.conversations.values())
 # because the front is the self-post on reddit)
 prompts = [[clean_utterance(j.text) 
             for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
-            for i in convos]
+            for i in convos][:10]
 R.shuffle(prompts)
 
 # fire this puppy off 
@@ -37,7 +37,7 @@ if __name__ == "__main__":
                         help='number of epochs to train')
     parser.add_argument('--horizon', type=int, default=4,
                         help='horizon of each episode')
-    parser.add_argument('--lr', type=float, default=1.41e-6,
+    parser.add_argument('--lr', type=float, default=1.41e-5,
                         help='learning rate')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
@@ -57,7 +57,7 @@ if __name__ == "__main__":
                           "wandb": {
                               "entity": "jemoka", 
                               # comment the line below out to log
-                              # "mode": "disabled"
+                              "mode": "disabled"
                           }
                       })
 
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # we need to do this because otherwise we may have
     # data duplication during FSDP
     dl = trainer.prepare(prompts)
-    val_dl = trainer.prepare(val)
+    val_dl = trainer.prepare(prompts)
 
     ##########
 

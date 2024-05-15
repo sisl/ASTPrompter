@@ -74,7 +74,8 @@ class LanguageModel(object):
         crit = None
         if stop_sequence:
             crit = EosListStoppingCriteria(stop_sequence)
-        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.device)
+        model_inputs = self.tokenizer([prompt], return_tensors="pt", max_length=1020,
+                truncation=True).to(self.device)
         # if we are using DDP, the model sits in a wrapper object which we have
         # to untangle before generate
         underlying = self.model
@@ -136,7 +137,17 @@ class LanguageModel(object):
         x_enc = self.tokenizer([x])["input_ids"][0]
         y_enc = self.tokenizer([y])["input_ids"][0]
         model_inputs = torch.tensor([x_enc+y_enc]).to(device if device else self.device)
-        res = self.model(input_ids=model_inputs)["logits"].squeeze(0)
+        underlying = self.model
+        if isinstance(underlying, DDP):
+            underlying = self.model.module
+
+        res = self.model(input_ids=model_inputs)
+
+        if isinstance(res, tuple):
+            res = res[0].squeeze(0)
+        else:
+            res = res["logits"].squeeze(0)
+
         res = F.log_softmax(res, dim=1)
 
         # isolate the output components' probabilities; remember that
