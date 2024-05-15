@@ -53,7 +53,7 @@ class LanguageModel(object):
     def to(self, device):
         self.model = self.model.to(device)
 
-    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=48, **kwargs):
+    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=48, dont_stop=False, **kwargs):
         """Rollout our policy until a stop sequence.
 
         Parameters
@@ -84,6 +84,15 @@ class LanguageModel(object):
             generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
                                                 temperature=temperature, top_p=top_p,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens, 
+                                                pad_token_id=self.tokenizer.eos_token_id,
+                                                eos_token_id=None)
+        elif dont_stop:
+            underlying.config.pad_token_id = None
+            underlying.config.eos_token_id = None
+            generated_ids = underlying.generate(**model_inputs, **kwargs,
+                                                temperature=temperature, top_p=top_p,
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens, 
+                                                stopping_criteria = [],
                                                 pad_token_id=self.tokenizer.eos_token_id)
         else:
             generated_ids = underlying.generate(**model_inputs, **kwargs,
@@ -140,6 +149,7 @@ class LanguageModel(object):
 
 
 # lm = LanguageModel()
+# breakpoint()
 # prompt1 = """
 # anon1: what do you still fucking want?
 # anon2: money and, you know, also

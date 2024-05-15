@@ -224,26 +224,26 @@ def jsonl_to_dict(fname):
 
 # Test formatting fixes
 
-# URLs
-url_test = '[hello](http://www.hello.com)'
-format_urls(url_test)
-url_test_multiple = '[hello](http://www.hello.com) filler filler filler [goodbye](http://www.goodbyye.com) lalala'
-format_urls(url_test_multiple)
+# # URLs
+# url_test = '[hello](http://www.hello.com)'
+# format_urls(url_test)
+# url_test_multiple = '[hello](http://www.hello.com) filler filler filler [goodbye](http://www.goodbyye.com) lalala'
+# format_urls(url_test_multiple)
 
-# Emojis and Unicode chars
-emoji_test = 'Only 8 months 🙄'
-print(remove_emojis(emoji_test))
+# # Emojis and Unicode chars
+# emoji_test = 'Only 8 months 🙄'
+# print(remove_emojis(emoji_test))
 
-# Bold and italics
-bold_test = "**wow** that's **so** cool"
-print(strip_bold(bold_test))
-italic_test = "_wow_ that's __so__ cool"
-print(strip_italic(italic_test))
+# # Bold and italics
+# bold_test = "**wow** that's **so** cool"
+# print(strip_bold(bold_test))
+# italic_test = "_wow_ that's __so__ cool"
+# print(strip_italic(italic_test))
 
-# Escaped HTML tags
-unescape_test = "anon0: &gt;&gt; Completely blindsided &amp;#x200B;"
-print(remove_unescape(unescape_test))
+# # Escaped HTML tags
+# unescape_test = "anon0: &gt;&gt; Completely blindsided &amp;#x200B;"
+# print(remove_unescape(unescape_test))
 
-# Test all
-test = "**wow** check out [this website](http://www.website.com) &amp; it's __so__ cool 🙄"
-print(clean_utterance(test))
+# # Test all
+# test = "**wow** check out [this website](http://www.website.com) &amp; it's __so__ cool 🙄"
+# print(clean_utterance(test))

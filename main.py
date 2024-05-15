@@ -1,5 +1,6 @@
 from convokit import Corpus, download, Conversation
 from toxicity.detoxify_reddit import filter_corpus_toxicity, jsonl_to_dict
+from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance
 
 from accelerate import Accelerator
 from trainer import Trainer
@@ -18,11 +19,13 @@ R = random.Random(24)
 corpus = Corpus(filename=download("reddit-corpus-small"))
 id2results = jsonl_to_dict('detox_results.jsonl')
 corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
+corpus = filter_corpus_formatting(corpus)
 convos = list(corpus.conversations.values())
 
 # we only keep the last five utterances (and also discard the front
 # because the front is the self-post on reddit)
-prompts = [[j.text for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
+prompts = [[clean_utterance(j.text) 
+            for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
            for i in convos]
 R.shuffle(prompts)
 

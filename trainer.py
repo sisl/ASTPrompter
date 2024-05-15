@@ -50,7 +50,6 @@ class Trainer:
         self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
         self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
-
         self.ppo = PPOTrainer(
             model = adversary_model,
             tokenizer = self.adversary.tokenizer,
@@ -166,8 +165,12 @@ class Trainer:
         """
         
         # run the prompt
+        # try:
         eps, rewards, _ = episode(self.adversary, self.defender, prompt,
                                   horizon=self.horizon, device=self.accelerator.device)
+        # except RuntimeError as e:
+            # logger.warning(f"encountered runtime error with episode, skipping!")
+            # return
         rewards_list = rewards
         rewards = torch.tensor(rewards)
 

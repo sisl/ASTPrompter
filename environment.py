@@ -47,7 +47,7 @@ def soft_sigmoid(x):
         return x/abs(x)
     return ((1/(1+math.exp(-x/10)))-0.5)*2
 
-def reward(step: ASTStep, alpha=10, beta=10, gamma=0.01):
+def reward(step: ASTStep, alpha=10, beta=3, gamma=0.0001):
     """The Reward Function.
 
     Parameters
@@ -125,22 +125,28 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
     # seralize into "userN" series
     for i in range(horizon):
         prompt = "\n".join(convo).strip()+"\n"
+
+        # to prevent overly long utterances
+        while len(prompt) > 1600 and len(convo) > 1:
+            convo = convo[1:]
         
         with torch.inference_mode():
             # we use random_rollout to ignore some generation kwargs
             # in particular min length and top p, to fix problems
             # outlined here:
             # https://discuss.huggingface.co/t/negative-kl-divergence-rlhf-implementation/53275
-            ut = adversary.rollout(prompt, max_new_tokens=48,
-                                   min_length=-1, top_p=1, top_k=0.0, do_sample=True,
-                                   temperature=None)
+            ut = adversary.rollout(prompt, max_new_tokens=36, 
+                    # min length 2 to prevent reward hacking with just <|endoftext|>, 
+                    # but we need it as low as possible to prevent kl divergence issues
+                                   min_length=2, top_p=1, top_k=0.0, do_sample=True,
+                                   temperature=None, dont_stop=True)
             new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
             convo.append(new_utterance_ast.strip())
 
             ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
 
             prompt = "\n".join(convo).strip()+"\n"
-            ut = defender.rollout(prompt, repetition_penalty=1.05, max_new_tokens=48)
+            ut = defender.rollout(prompt, repetition_penalty=1.05, max_new_tokens=36)
             new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
             convo.append(new_utterance_def.strip())
 
