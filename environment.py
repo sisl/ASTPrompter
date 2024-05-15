@@ -109,14 +109,14 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
                     # but we need it as low as possible to prevent kl divergence issues
                                    min_length=2, top_p=1, top_k=0.0, do_sample=True,
                                    temperature=None, dont_stop=True)
-            new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()[:100]
             convo.append(new_utterance_ast.strip())
 
             ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
 
             prompt = "\n".join(convo).strip()+"\n"
             ut = defender.rollout(prompt, repetition_penalty=1.05, max_new_tokens=36)
-            new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()[:100]
             convo.append(new_utterance_def.strip())
 
             combined_tox = call_detoxify(new_utterance_ast + "\n" + new_utterance_def)["toxicity"] # we want this to be high for AST
