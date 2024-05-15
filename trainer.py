@@ -172,7 +172,7 @@ class Trainer:
             # logger.warning(f"encountered runtime error with episode, skipping!")
             # return
         rewards_list = rewards
-        rewards = torch.tensor(rewards)
+        rewards = torch.tensor(rewards).float()
 
         # the environment has already prepared query and response
         # tensors for us. to edit that behavior, change the environment
@@ -188,12 +188,12 @@ class Trainer:
             return
 
         # Run PPO step
-        try:
-            stats = self.ppo.step([torch.tensor(i) for i in query_ids],
-                                  [torch.tensor(i) for i in response_ids],
-                                  list(rewards.unbind(0)))
-        except RuntimeError as e:
-            breakpoint()
+        # try:
+        stats = self.ppo.step([torch.tensor(i) for i in query_ids],
+                              [torch.tensor(i) for i in response_ids],
+                              list(rewards.unbind(0)))
+        # except RuntimeError as e:
+            # return
 
         # we need to send rewards to cuda because ddp needs them on the
         # same device for logging

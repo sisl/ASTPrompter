@@ -117,9 +117,11 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
             ut = adversary.rollout(prompt, max_new_tokens=36, 
                     # min length 2 to prevent reward hacking with just <|endoftext|>, 
                     # but we need it as low as possible to prevent kl divergence issues
-                                   min_length=2, top_p=1, top_k=0.0, 
+                                   min_new_tokens=36, top_p=1, top_k=0.0, 
                                    temperature=0.5,
                                    do_sample=True, dont_stop=True)
+            if len(ut) < 20:
+                breakpoint()
             new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
             convo.append(new_utterance_ast.strip())
 
