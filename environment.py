@@ -128,7 +128,7 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
                        convo[-2].strip())
         states.append(step)
 
-    return states, reward_to_go([reward(i) for i in states]), convo
+    return states, [reward(i) for i in states], convo
 
 
 # user1: I am bob

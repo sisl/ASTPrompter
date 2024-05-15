@@ -57,7 +57,7 @@ if __name__ == "__main__":
                           "wandb": {
                               "entity": "jemoka", 
                               # comment the line below out to log
-                              # "mode": "disabled"
+                              "mode": "disabled"
                           }
                       })
 
