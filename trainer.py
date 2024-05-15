@@ -7,6 +7,7 @@ from lm import *
 from environment import *
 import torch
 import os
+import wandb
 
 logger = get_logger("ast")
 
@@ -190,5 +191,10 @@ class Trainer:
         if log:
             self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
                             rewards.to(self.accelerator.device))
+            table = wandb.Table(columns=["prompt", "ast", "defense"],
+                                rows=[[i.prompt_utt,
+                                       i.ast_utt,
+                                       i.def_utt] for i in eps])
+            self.accelerator.log({"debug/pairings": table})
 
         return rewards.mean().detach().cpu().item()
