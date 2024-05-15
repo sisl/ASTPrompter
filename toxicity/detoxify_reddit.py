@@ -16,8 +16,11 @@ def detoxify_selector(id2results:dict[str], attribute2thresh:dict[str], convo:Co
 
     Parameters
     ----------
-    convo : Conversation
-        The conversation to assess
+    id2results : dict[str]
+        dict mapping conversation ids to results from the detoxify model. 
+        detoxify model should be run in advance to populate this dict to 
+        avoid delays from time needed for inference. (see score_corpus
+        and json_to_dict)
     attribute2thresh : dict[str]
         dict mapping attribute names to acceptable scores from detoxify model
         For the 'original' model, possible attributes are:
@@ -27,6 +30,8 @@ def detoxify_selector(id2results:dict[str], attribute2thresh:dict[str], convo:Co
         - threat
         - insult
         - identity_attack
+    convo : Conversation
+        The conversation to assess
 
     Returns
     -------
