@@ -6,22 +6,27 @@ from transformers import AutoTokenizer
 from lm import *
 from environment import *
 import torch
+import os
+import wandb
 
 logger = get_logger("ast")
 
 class Trainer:
 
     def __init__(self,
-                 horizon=5,
+                 args,
                  model="openai-community/gpt2",
                  defense="openai-community/gpt2",
                  **kwargs):
 
+        horizon = args.horizon
+
         config = PPOConfig(
             model_name=model,
-            learning_rate=1.41e-5,
+            learning_rate=1.41e-6,
             mini_batch_size=horizon,
             batch_size=horizon,
+            kl_penalty="full",
             **kwargs
         )
 
@@ -59,6 +64,27 @@ class Trainer:
 
         self.horizon = horizon
 
+        self.save_dir = os.path.join(args.save_dir,
+                                     f"ppo_model_{model.split('/')[-1]}")
+
+    @property
+    def accelerator(self):
+        return self.ppo.accelerator
+
+    def save(self, postfix=""):
+        """save the model, optionally with a postfix
+
+        Parameters
+        ----------
+        postfix : str
+            the postfix to save (i.e. if save name was this/here, postfix
+            will make it this/here_postfix)
+        """
+
+        self.ppo.save_pretrained((self.save_dir+("_"+postfix
+                                                 if postfix != ""
+                                                 else "").strip()))
+    
     def prepare(self, prompts):
         """Make a distributed dataset from stings for training.
 
@@ -90,40 +116,59 @@ class Trainer:
 
         # huggingface accelerate may ship the dataset
         # off to different processes, etc.
-        return self.ppo.accelerator.prepare(dl)
+        return self.accelerator.prepare(dl)
 
-    def epoch(self, dataloader, id=""):
+    def epoch(self, dataloader, log_every=10):
         """Run an epoch of the data.
 
         Parameters
         ----------
         dataloader : torch.utils.data.DataLoader
             The dataloader you got from self.prepare.
-        id : Optional[str]
-            ID of this epoch for logging purposes.
+        log_every : Optional[int]
+            how often to log to wandb
         """
-        
         
         # this should be a batch of one, so we index
         # to get rid of the outer shell
-        for batch in dataloader:
-            self.step(batch[0])
+        for i, batch in enumerate(dataloader):
+            self.step(batch[0], log=(i % log_every == 0))
 
-        # todo eval
-        logger.info(f"Done with epoch {id}".strip())
+    def play(self, prompt):
+        """self play to run the prompt
 
-    def step(self, prompt):
+        Parameters
+        ----------
+        prompt : List[str]
+            the prompt to evaluate on
+
+        Returns
+        -------
+        List[ASTStep], List[float], List[str]
+            Steps, rewards per step, conversation.
+        """
+        
+        # run the prompt
+        eps, rewards, convo = episode(self.adversary, self.defender, prompt,
+                                      horizon=self.horizon, device=self.accelerator.device)
+
+        return eps, rewards, convo
+
+    def step(self, prompt, log=False):
         """Optimize our model by a single step.
 
         Parameters
         ----------
         prompt : List[str]
             The prompt to optimize!
+        log : bool
+            whether to log
         """
         
         # run the prompt
         eps, rewards, _ = episode(self.adversary, self.defender, prompt,
-                                  horizon=self.horizon, device=self.ppo.accelerator.device)
+                                  horizon=self.horizon, device=self.accelerator.device)
+        rewards_list = rewards
         rewards = torch.tensor(rewards)
 
         # the environment has already prepared query and response
@@ -131,37 +176,31 @@ class Trainer:
         qs = [i.query for i in eps]
         rs = [i.response for i in eps]
 
-        print(eps[-1].ast_utt)
-
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]
         response_ids = self.adversary.tokenizer(rs)["input_ids"]
+    
+        # if the AST said nothing, don't run anything 
+        if 0 in [len(i) for i in response_ids]:
+            return
 
         # Run PPO step
-        stats = self.ppo.step([torch.tensor(i) for i in query_ids],
-                              [torch.tensor(i) for i in response_ids],
-                              list(rewards.unbind(0)))
+        try:
+            stats = self.ppo.step([torch.tensor(i) for i in query_ids],
+                                  [torch.tensor(i) for i in response_ids],
+                                  list(rewards.unbind(0)))
+        except RuntimeError:
+            breakpoint()
 
         # we need to send rewards to cuda because ddp needs them on the
         # same device for logging
-        self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
-                           rewards.to(self.ppo.accelerator.device))
+        if log:
+            self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
+                            rewards.to(self.accelerator.device))
+            table = wandb.Table(columns=["prompt", "ast", "defense", "reward"],
+                                rows=[[i.prompt_utt,
+                                       i.ast_utt,
+                                       i.def_utt,
+                                       r] for i,r in zip(eps, rewards_list)])
+            self.accelerator.log({"debug/pairings": table})
 
-if __name__ == "__main__":
-    accelerator_kwargs = {
-        # "cpu": True
-    }
-    # initialize accelerator once before??
-    acc = Accelerator(**accelerator_kwargs)
-    trainer = Trainer(accelerator_kwargs=accelerator_kwargs)
-
-    # make some mock data
-    prompts = [
-        ["WTF are you doing?"],
-    ]
-
-    dl = trainer.prepare(prompts)
-
-    # train on a single line
-    trainer.epoch(dl)
-    breakpoint()
