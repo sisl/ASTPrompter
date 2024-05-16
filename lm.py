@@ -74,8 +74,8 @@ class LanguageModel(object):
         crit = None
         if stop_sequence:
             crit = EosListStoppingCriteria(stop_sequence)
-        model_inputs = self.tokenizer([prompt], return_tensors="pt", max_length=1020,
-                truncation=True).to(self.device)
+        model_inputs = self.tokenizer([prompt], return_tensors="pt", 
+                max_length=950, truncation=True).to(self.device)
         # if we are using DDP, the model sits in a wrapper object which we have
         # to untangle before generate
         underlying = self.model
@@ -134,8 +134,8 @@ class LanguageModel(object):
         """
         
         # combine the input and output and forward pass
-        x_enc = self.tokenizer([x])["input_ids"][0]
-        y_enc = self.tokenizer([y])["input_ids"][0]
+        x_enc = self.tokenizer([x], max_length=959, truncation=True)["input_ids"][0]
+        y_enc = self.tokenizer([y], max_length=64, truncation=True)["input_ids"][0]
         model_inputs = torch.tensor([x_enc+y_enc]).to(device if device else self.device)
         underlying = self.model
         if isinstance(underlying, DDP):
