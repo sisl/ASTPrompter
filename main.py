@@ -17,30 +17,30 @@ logger = get_logger("ast")
 # fix random sede for reproducibility
 R = random.Random(24)
 
-TEACH = True
+# TEACH = False
 
-if not TEACH:
-    # load our initial corpus ahead of time
-    corpus = Corpus(filename=download("reddit-corpus-small"))
-    id2results = jsonl_to_dict('detox_results.jsonl')
-    corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
-    corpus = filter_corpus_formatting(corpus)
-    convos = list(corpus.conversations.values())
+# if not TEACH:
+# load our initial corpus ahead of time
+corpus = Corpus(filename=download("reddit-corpus-small"))
+id2results = jsonl_to_dict('detox_results.jsonl')
+corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
+corpus = filter_corpus_formatting(corpus)
+convos = list(corpus.conversations.values())
 
-    # we only keep the last five utterances (and also discard the front
-    # because the front is the self-post on reddit)
-    prompts = [[clean_utterance(j.text) 
-                for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
-                for i in convos]
-else:
-    with open("prompts.jsonl", 'r') as df:
-        lines = df.readlines()
-        data = json.loads("["+",".join(lines)+"]")
-        # prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
-        prompts = [(i["prompt"]["text"], 
-                    i["continuation"]["text"])
-                   for i in data if i["continuation"]["toxicity"]
-                   and i["continuation"]["toxicity"] > 0.3]
+# we only keep the last five utterances (and also discard the front
+# because the front is the self-post on reddit)
+prompts_reddit = [[clean_utterance(j.text) 
+    for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
+    for i in convos]
+
+with open("prompts.jsonl", 'r') as df:
+    lines = df.readlines()
+    data = json.loads("["+",".join(lines)+"]")
+    # prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
+    prompts_rtp = [(i["prompt"]["text"], 
+        i["continuation"]["text"])
+        for i in data if i["continuation"]["toxicity"]
+        and i["continuation"]["toxicity"] > 0.3]
 
 # fire this puppy off 
 if __name__ == "__main__":
@@ -48,13 +48,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='AST Trainer')
     parser.add_argument('--epochs', type=int, default=100,
                         help='number of epochs to train')
-    parser.add_argument('--horizon', type=int, default=4,
+    parser.add_argument('--horizon', type=int, default=3,
                         help='horizon of each episode')
     parser.add_argument('--batch_size', type=int, default=16,
                         help='horizon of each episode')
     parser.add_argument('--experience_size', type=int, default=1024,
                         help='how many experience samples to collect per epoch?')
-    parser.add_argument('--lr', type=float, default=1.41e-6,
+    parser.add_argument('--lr', type=float, default=1.41e-7,
                         help='learning rate')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
@@ -62,11 +62,27 @@ if __name__ == "__main__":
                         help='the folder place to save our model')
     parser.add_argument('--warm_start', type=str, default=None,
                         help='start your policy here')
-    parser.add_argument('--decay_factor', type=float, default=0.99,
-                        help='how much to decay the lr per step, default 0.99')
+    parser.add_argument('--decay_factor', type=float, default=0.9995,
+                        help='how much to decay the lr per step, default 0.9995')
+    parser.add_argument('--gradient_clip', type=float, default=0.2,
+                        help='clip to gradient norm to this value')
+    parser.add_argument('--ratio_threshold', type=float, default=8,
+                        help='if the logprobs are super duper confident, that\'s bad')
+    parser.add_argument('--reward_clip', type=float, default=2,
+                        help='clip to reward to this value')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
+    parser.add_argument('--teach', action="store_true", default=False,
+                        help='force teach the AST model instead of rollout?')
     args = parser.parse_args()
+
+    if args.teach:
+        prompts = prompts_rtp
+    else:
+        prompts = prompts_reddit
+
+
+    TEACH = args.teach
 
     # if we are CPU, we have to do it here BEFORE argparse
     accelerator_kwargs = {

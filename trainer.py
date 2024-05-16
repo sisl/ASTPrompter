@@ -32,7 +32,9 @@ class Trainer:
             kl_penalty="full",
             use_score_scaling=True,
             use_score_norm=True,
-            score_clip=0.9,
+            score_clip=args.reward_clip,
+            max_grad_norm=args.gradient_clip,
+            ratio_threshold=args.ratio_threshold,
             **kwargs
         )
 
