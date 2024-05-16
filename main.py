@@ -50,10 +50,12 @@ if __name__ == "__main__":
                         help='number of epochs to train')
     parser.add_argument('--horizon', type=int, default=3,
                         help='horizon of each episode')
-    parser.add_argument('--init_kl', type=float, default=0.5,
+    parser.add_argument('--init_kl', type=float, default=1,
                         help='init beta for kl penalty')
     parser.add_argument('--batch_size', type=int, default=8,
                         help='horizon of each episode')
+    parser.add_argument('--vf_scale', type=float, default=0.01,
+                        help='value function loss scale')
     parser.add_argument('--experience_size', type=int, default=512,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=1.41e-6,

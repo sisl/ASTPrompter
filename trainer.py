@@ -42,6 +42,7 @@ class Trainer:
             score_clip=args.reward_clip,
             max_grad_norm=args.gradient_clip,
             ratio_threshold=args.ratio_threshold,
+            vf_coef=args.vf_scale,
             **kwargs
         )
 
