@@ -50,7 +50,7 @@ if __name__ == "__main__":
                         help='number of epochs to train')
     parser.add_argument('--horizon', type=int, default=4,
                         help='horizon of each episode')
-    parser.add_argument('--batch_size', type=int, default=32,
+    parser.add_argument('--batch_size', type=int, default=16,
                         help='horizon of each episode')
     parser.add_argument('--experience_size', type=int, default=1024,
                         help='how many experience samples to collect per epoch?')
@@ -58,6 +58,8 @@ if __name__ == "__main__":
                         help='learning rate')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
+    parser.add_argument('--save_name', type=str, default=None,
+                        help='the folder place to save our model')
     args = parser.parse_args()
 
     # if we are CPU, we have to do it here BEFORE argparse

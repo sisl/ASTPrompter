@@ -66,8 +66,10 @@ class Trainer:
 
         self.horizon = horizon
 
-        self.save_dir = os.path.join(args.save_dir,
-                                     f"ppo_model_{model.split('/')[-1]}")
+        save_name = f"ppo_model_{model.split('/')[-1]}"
+        if args.save_name:
+            save_name = args.save_name
+        self.save_dir = os.path.join(args.save_dir, save_name)
 
     @property
     def accelerator(self):
