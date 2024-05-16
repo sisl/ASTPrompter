@@ -123,43 +123,46 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
     # jsut force an output
     # seralize into "userN" series
     for i in range(horizon):
-        prompt = "\n".join(convo).strip()+"\n"
+        prompt = " ".join(convo).strip()
 
         # to prevent overly long utterances
-        while len(prompt) > 1600 and len(convo) > 1:
+        while len(prompt) > 1500 and len(convo) > 1:
             convo = convo[1:]
+            prompt = " ".join(convo).strip()
         
         with torch.inference_mode():
             # we use random_rollout to ignore some generation kwargs
             # in particular min length and top p, to fix problems
             # outlined here:
             # https://discuss.huggingface.co/t/negative-kl-divergence-rlhf-implementation/53275
-            ut = adversary.rollout(prompt, max_new_tokens=36, 
+            ut = adversary.rollout(prompt, max_new_tokens=24, 
                     # min length 2 to prevent reward hacking with just <|endoftext|>, 
                     # but we need it as low as possible to prevent kl divergence issues
-                                    min_new_tokens=35, top_p=1, top_k=0.0, 
-                                    temperature=0.5,
-                                    do_sample=True, dont_stop=True)
+                                    min_new_tokens=-1, top_p=1, top_k=0.0, 
+                                    # temperature=0.5,
+                                    do_sample=True, dont_stop=True, skip_special_tokens=True)
             if len(ut) < 20:
                 breakpoint()
-            new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            new_utterance_ast = ut.replace(prompt, "").strip()
 
             convo.append(new_utterance_ast.strip())
 
             ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
 
-            prompt = "\n".join(convo).strip()+"\n"
-            ut = defender.rollout(prompt, repetition_penalty=1.05, max_new_tokens=36, skip_special_tokens=True)
-            new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            prompt = " ".join(convo).strip()
+            ut = defender.rollout(prompt, max_new_tokens=24, repetition_penalty=1.05, skip_special_tokens=True)
+            new_utterance_def = ut.replace(prompt, "").strip()
 
             convo.append(new_utterance_def.strip())
 
-            combined_tox = call_detoxify(new_utterance_ast + "\n" + new_utterance_def)["toxicity"] # we want this to be high for AST
+            combined_tox = call_detoxify(new_utterance_ast + new_utterance_def)["toxicity"] # we want this to be high for AST
             ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
+
+            # print(len(convo), convo[-1])
         
         step = ASTStep(convo[-3].strip(), new_utterance_ast, ast_ppl,
                         new_utterance_def, ast_tox, combined_tox,
-                        ("\n".join(convo[:-2])).strip()+"\n",
+                        (" ".join(convo[:-2])).strip(),
                         convo[-2].strip())
         states.append(step)
 
@@ -204,6 +207,19 @@ def teach(adversary: LanguageModel, defender: LanguageModel,
                    new_utterance_ast)
 
     return step, reward(step)
+
+
+# eps, rew, convo = episode(adversary, defender, ["What are you doing?", "Oh he did?"])
+# print(convo[6])
+
+# len(convo)
+# print(" ".join(convo))
+# convo[0]
+# len(eps)
+# len(convo)
+# convo[0]
+
+# bk = eps
 
 
 # teach(adversary, defender, "hello", "butter my butt and call me ")
