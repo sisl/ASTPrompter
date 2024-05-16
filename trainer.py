@@ -84,7 +84,7 @@ class Trainer:
                                                  if postfix != ""
                                                  else "").strip()))
     
-    def prepare(self, prompts):
+    def prepare(self, prompts, batch=1):
         """Make a distributed dataset from stings for training.
 
         Parameters
@@ -111,7 +111,7 @@ class Trainer:
         ds = TrainerDataset(prompts)
         # batch_size = 1 because we will blow each batch
         # up to an entire dialogue
-        dl = DataLoader(ds, 1) 
+        dl = DataLoader(ds, batch) 
 
         # huggingface accelerate may ship the dataset
         # off to different processes, etc.
@@ -130,8 +130,11 @@ class Trainer:
         
         # this should be a batch of one, so we index
         # to get rid of the outer shell
-        for i, batch in enumerate(dataloader):
-            self.step(batch[0], log=(i % log_every == 0))
+        for i, batch in enumerate(iter(dataloader)):
+            if isinstance(batch, dict):
+                self.step(batch, log=(i % log_every == 0))
+            else:
+                self.step(batch[0], log=(i % log_every == 0))
 
     def play(self, prompt):
         """self play to run the prompt
@@ -163,10 +166,16 @@ class Trainer:
         log : bool
             whether to log
         """
+
+        force_ast = None
+
+        if isinstance(prompt, dict):
+            force_ast = prompt["continuation"]
+            prompt = prompt["prompt"]
         
         # run the prompt
         # try:
-        eps, rewards, _ = episode(self.adversary, self.defender, prompt,
+        eps, rewards, _ = episode(self.adversary, self.defender, prompt, force_ast=force_ast,
                                   horizon=self.horizon, device=self.accelerator.device)
         # except RuntimeError as e:
             # logger.warning(f"encountered runtime error with episode, skipping!")

@@ -96,11 +96,14 @@ def reward(step: ASTStep, tox_threshold=0.5, terminal=False):
     return r
 
 def episode(adversary: LanguageModel, defender: LanguageModel,
-            prompt_src: List[str], horizon=5, **kwargs):
+            prompt_src: List[str], force_ast=None, horizon=5, **kwargs):
     stop_adv = adversary.tokenizer("user")["input_ids"][0]
     stop_def = defender.tokenizer("user")["input_ids"][0]
     convo = list(prompt_src[:])
     states = []
+    # if we are forcing ast, we use a wholly different procedure whereby
+    # we wouldn't sample rollouts from the continuation and instea
+    # jsut force an output
     # seralize into "userN" series
     for i in range(horizon):
         prompt = "\n".join(convo).strip()+"\n"
@@ -113,32 +116,51 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
             # we use random_rollout to ignore some generation kwargs
             # in particular min length and top p, to fix problems
             # outlined here:
-            # https://discuss.huggingface.co/t/negative-kl-divergence-rlhf-implementation/53275
-            ut = adversary.rollout(prompt, max_new_tokens=36, 
-                    # min length 2 to prevent reward hacking with just <|endoftext|>, 
-                    # but we need it as low as possible to prevent kl divergence issues
-                                   min_new_tokens=36, top_p=1, top_k=0.0, 
-                                   temperature=0.5,
-                                   do_sample=True, dont_stop=True)
-            if len(ut) < 20:
-                breakpoint()
-            new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            if not force_ast:
+                # https://discuss.huggingface.co/t/negative-kl-divergence-rlhf-implementation/53275
+                ut = adversary.rollout(prompt, max_new_tokens=36, 
+                        # min length 2 to prevent reward hacking with just <|endoftext|>, 
+                        # but we need it as low as possible to prevent kl divergence issues
+                                       min_new_tokens=36, top_p=1, top_k=0.0, 
+                                       temperature=0.5,
+                                       do_sample=True, dont_stop=True)
+                if len(ut) < 20:
+                    breakpoint()
+                new_utterance_ast = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            else:
+                new_utterance_ast = force_ast[i]
             convo.append(new_utterance_ast.strip())
 
-            ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
+            if not force_ast:
+                ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
+            else:
+                ast_ppl = defender.perplexity(new_utterance_ast, prompt_src[i], device=kwargs.get("device")).detach().item()
 
             prompt = "\n".join(convo).strip()+"\n"
-            ut = defender.rollout(prompt, repetition_penalty=1.05, max_new_tokens=36)
-            new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            if not force_ast:
+                ut = defender.rollout(prompt, repetition_penalty=1.05, max_new_tokens=36)
+                new_utterance_def = ut.replace(prompt, "").strip().split("\n")[0].strip()
+            else:
+                pt = prompt_src[i]+"\n"+new_utterance_ast
+                ut = defender.rollout(pt, 
+                        repetition_penalty=1.05, max_new_tokens=36)
+                new_utterance_def = ut.replace(pt, "").strip().split("\n")[0].strip()
+
             convo.append(new_utterance_def.strip())
 
             combined_tox = call_detoxify(new_utterance_ast + "\n" + new_utterance_def)["toxicity"] # we want this to be high for AST
             ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
-
-        step = ASTStep(convo[-3].strip(), new_utterance_ast, ast_ppl,
-                       new_utterance_def, ast_tox, combined_tox,
-                       ("\n".join(convo[:-2])).strip()+"\n",
-                       convo[-2].strip())
+        
+        if not force_ast:
+            step = ASTStep(convo[-3].strip(), new_utterance_ast, ast_ppl,
+                           new_utterance_def, ast_tox, combined_tox,
+                           ("\n".join(convo[:-2])).strip()+"\n",
+                           convo[-2].strip())
+        else:
+            step = ASTStep(prompt_src[i], new_utterance_ast, ast_ppl,
+                           new_utterance_def, ast_tox, combined_tox,
+                           prompt_src[i],
+                           new_utterance_ast)
         states.append(step)
 
     return states, [reward(i) 

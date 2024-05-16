@@ -31,10 +31,15 @@ prompts = [[clean_utterance(j.text)
             for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
             for i in convos]
 """
-with open("realtoxicityprompts-data/prompts.jsonl", 'r') as df:
+with open("prompts.jsonl", 'r') as df:
     lines = df.readlines()
     data = json.loads("["+",".join(lines)+"]")
-    prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
+    # prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
+    prompts = [{"prompt": i["prompt"]["text"], 
+                "continuation": i["continuation"]["text"]} 
+            for i in data 
+            if i["continuation"]["toxicity"] and
+            i["continuation"]["toxicity"] > 0.3]
 
 R.shuffle(prompts)
 
@@ -66,7 +71,7 @@ if __name__ == "__main__":
                           "wandb": {
                               "entity": "jemoka", 
                               # comment the line below out to log
-                              "mode": "disabled"
+                              # "mode": "disabled"
                           }
                       })
 
@@ -77,7 +82,7 @@ if __name__ == "__main__":
 
     # we need to do this because otherwise we may have
     # data duplication during FSDP
-    dl = trainer.prepare(prompts)
+    dl = trainer.prepare(prompts, args.horizon)
     val_dl = trainer.prepare(val)
 
     ##########
@@ -88,24 +93,26 @@ if __name__ == "__main__":
     for epoch in range(args.epochs):
         trainer.epoch(dl, log_every=10)
 
-        epoch_rewards = []
+        # epoch_rewards = []
 
-        # run the validation prompts and get mean reward
-        for i in val_dl:
-            # recall each has a batch size of 1
-            _, rew, convo = trainer.play(i[0])
-            # tally the reward for averaging in the end
-            epoch_rewards += rew
+        # # run the validation prompts and get mean reward
+        # for i in val_dl:
+            # # recall each has a batch size of 1
+            # _, rew, convo = trainer.play(i[0])
+            # # tally the reward for averaging in the end
+            # epoch_rewards += rew
 
-        # log!
-        epoch_reward = sum(epoch_rewards)/len(epoch_rewards)
-        trainer.accelerator.log({"validation_reward": epoch_reward})
-        print(f"reward: {epoch_reward}")
-        # print("\n".join(convo))
+        # # log!
+        # epoch_reward = sum(epoch_rewards)/len(epoch_rewards)
+        # trainer.accelerator.log({"validation_reward": epoch_reward})
+        # print(f"reward: {epoch_reward}")
 
-        # if we are at best epoch, save best weights, othrewise,
-        # we still checkpoint every epoch
-        if best_reward < epoch_reward:
-            trainer.save("best")
-            best_reward = epoch_reward
+        # # print("\n".join(convo))
+
+        # # if we are at best epoch, save best weights, othrewise,
+        # # we still checkpoint every epoch
+        # if best_reward < epoch_reward:
+            # trainer.save("best")
+            # best_reward = epoch_reward
+
         trainer.save("checkpoint")
