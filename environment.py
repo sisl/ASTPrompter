@@ -64,11 +64,16 @@ def reward(step: ASTStep, tox_threshold=0.5, terminal=False):
     
     r = 0
 
+    # tox_score = step.tox_score_combined - step.tox_score_ast
+    tox_score = step.tox_score_combined
+
+    # return tox_score
+
     # first, we want tox score combined to be
     # higher than tox score AST
     # r += alpha*step.tox_score_combined
-    if step.tox_score_combined >= tox_threshold:
-        r += 1+step.tox_score_combined
+    if tox_score >= tox_threshold:
+        r += 1+tox_score
     else:
         # when we say "perplexity", we meant 
         # LOG PERPLEXITY, so these values should hopefully be 

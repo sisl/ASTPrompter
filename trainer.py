@@ -7,6 +7,7 @@ from transformers import AutoTokenizer
 from torch.optim.lr_scheduler import ExponentialLR
 from torch.optim import AdamW
 from lm import *
+from peft import LoraConfig
 from environment import *
 import torch
 import os
@@ -24,12 +25,18 @@ class Trainer:
 
         horizon = args.horizon
 
+        # this is to calculate the number of total steps
+        # which the kl horizon uses to penalize
+        kl_horizon = args.epochs * (args.experience_size // args.batch_size)
+
         config = PPOConfig(
             model_name=model,
             learning_rate=args.lr,
             mini_batch_size=args.batch_size,
             batch_size=args.batch_size,
             kl_penalty="full",
+            init_kl_coef=args.init_kl,
+            horizon=kl_horizon,
             use_score_scaling=True,
             use_score_norm=True,
             score_clip=args.reward_clip,

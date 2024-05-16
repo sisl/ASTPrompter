@@ -46,10 +46,12 @@ with open("prompts.jsonl", 'r') as df:
 if __name__ == "__main__":
     # establish the arguments of this system
     parser = argparse.ArgumentParser(description='AST Trainer')
-    parser.add_argument('--epochs', type=int, default=100,
+    parser.add_argument('--epochs', type=int, default=20,
                         help='number of epochs to train')
     parser.add_argument('--horizon', type=int, default=3,
                         help='horizon of each episode')
+    parser.add_argument('--init_kl', type=float, default=0.5,
+                        help='init beta for kl penalty')
     parser.add_argument('--batch_size', type=int, default=8,
                         help='horizon of each episode')
     parser.add_argument('--experience_size', type=int, default=512,
