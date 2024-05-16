@@ -108,13 +108,14 @@ class Trainer:
                 super().__init__()
                 self.__data = data
                 self.__reward = reward
-                assert len(self.__data) == self.__reward, "lengths fo reward and data are not the same lengths!"
+                assert len(self.__data) == len(self.__reward), "lengths fo reward and data are not the same lengths!"
             def __getitem__(self, x):
-                return self.__data[x].query, self.__data[x].response, self.__reward[x]
+                return (self.__data[x].query, self.__data[x].response, self.__reward[x], 
+                        self.__data[x].prompt_utt, self.__data[x].ast_utt, self.__data[x].def_utt)
             def __len__(self):
                 return len(self.__data)
 
-        ds = TrainerDataset(prompts)
+        ds = TrainerDataset(steps, rewards)
         # batch_size = 1 because we will blow each batch
         # up to an entire dialogue
         dl = DataLoader(ds, batch) 
@@ -189,8 +190,8 @@ class Trainer:
             whether to log
         """
 
-        qs, rs, rewards_list = batch
-        rewards = torch.tensor(rewards).float()
+        qs, rs, rewards_list, p_ut, a_ut, def_ut = batch
+        rewards = torch.tensor(rewards_list).float()
 
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]
@@ -214,9 +215,7 @@ class Trainer:
             self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
                             rewards.to(self.accelerator.device))
             table = wandb.Table(columns=["prompt", "ast", "defense", "reward"],
-                                rows=[[i.prompt_utt,
-                                       i.ast_utt,
-                                       i.def_utt,
-                                       r] for i,r in zip(eps, rewards_list)])
+                                rows=[[i, j, k, r] 
+                                    for i,j,k,r in zip(p_ut, a_ut, def_ut, rewards_list)])
             self.accelerator.log({"debug/pairings": table})
 

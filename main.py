@@ -10,6 +10,7 @@ import argparse
 import json
 
 from accelerate.logging import get_logger
+from accelerate.utils.tqdm import tqdm
 
 logger = get_logger("ast")
 
@@ -40,8 +41,6 @@ with open("prompts.jsonl", 'r') as df:
                for i in data if i["continuation"]["toxicity"]
                and i["continuation"]["toxicity"] > 0.3]
 
-R.shuffle(prompts)
-
 # fire this puppy off 
 if __name__ == "__main__":
     # establish the arguments of this system
@@ -52,6 +51,8 @@ if __name__ == "__main__":
                         help='horizon of each episode')
     parser.add_argument('--batch_size', type=int, default=32,
                         help='horizon of each episode')
+    parser.add_argument('--experience_size', type=int, default=1024,
+                        help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=1.41e-6,
                         help='learning rate')
     parser.add_argument('--save_dir', type=str, default='models',
@@ -72,19 +73,9 @@ if __name__ == "__main__":
                           "wandb": {
                               "entity": "jemoka", 
                               # comment the line below out to log
-                              # "mode": "disabled"
+                              "mode": "disabled"
                           }
                       })
-
-    # parcel out the last N samples as validation data
-    # TODO sensible choices?
-    val = prompts[-8:]
-    prompts = prompts[:-8]
-
-    # we need to do this because otherwise we may have
-    # data duplication during FSDP
-    dl = trainer.prepare(prompts, args.horizon)
-    val_dl = trainer.prepare(val)
 
     ##########
 
@@ -92,13 +83,16 @@ if __name__ == "__main__":
     
     # good vibes time
     for epoch in range(args.epochs):
+        # shuffle the data
+        R.shuffle(prompts)
         # experience the experience
         with trainer.accelerator.main_process_first():
+            logger.info("loading training data...")
 
-            # IF we are currently teaching, collect teaching
-            # trajectories
+            # IF we are currently teaching, collect teaching trajectories
             steps, rewards = [], []
-            for prompt in prompts:
+            # recall prompts are shuffled
+            for prompt in tqdm(prompts[:args.experience_size]):
                 step, reward = trainer.teach(*prompt)
                 steps.append(step)
                 rewards.append(reward)
