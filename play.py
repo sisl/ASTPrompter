@@ -1,7 +1,7 @@
 from trl import AutoModelForCausalLMWithValueHead
 from transformers import AutoTokenizer
 
-checkpoint = "./models/ppo_model_gpt2_rewimprv_checkpoint"
+checkpoint = "./models/ppo_model_gpt2_toxbase_checkpoint"
 
 model = AutoModelForCausalLMWithValueHead.from_pretrained(checkpoint)
 model_base = AutoModelForCausalLMWithValueHead.from_pretrained("openai-community/gpt2")

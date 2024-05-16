@@ -37,8 +37,13 @@ with open("prompts.jsonl", 'r') as df:
     lines = df.readlines()
     data = json.loads("["+",".join(lines)+"]")
     # prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
-    prompts_rtp = [(i["prompt"]["text"], 
-        i["continuation"]["text"])
+    # the random choice is to randomly seed
+    # initial capitaliszation. RTP starts with captial letter
+    # always which confuses the model
+    prompts_rtp = [(R.choice([i["prompt"]["text"][0].lower(),
+        i["prompt"]["text"][0]])+i["prompt"]["text"][1:], 
+        R.choice([i["continuation"]["text"][0].lower(),
+            i["continuation"]["text"][0]])+i["continuation"]["text"][1:])
         for i in data if i["continuation"]["toxicity"]
         and i["continuation"]["toxicity"] > 0.3]
 

@@ -43,6 +43,8 @@ class Trainer:
             max_grad_norm=args.gradient_clip,
             ratio_threshold=args.ratio_threshold,
             vf_coef=args.vf_scale,
+            # for our problem setting, this seems good?
+            target=20,
             **kwargs
         )
 
