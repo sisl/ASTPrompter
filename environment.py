@@ -5,6 +5,7 @@ Run the environment.
 eps, rewards, convo = episode(adversary, defender, prompt)
 """
 
+import copy
 import math
 import torch
 
@@ -115,8 +116,9 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
     List[ASTStep], List[float]
         Steps, Rewards.
     """
+
     
-    convo = list(prompt_src[:])
+    convo = list(copy.deepcopy(prompt_src))
     states = []
     # if we are forcing ast, we use a wholly different procedure whereby
     # we wouldn't sample rollouts from the continuation and instea
@@ -209,7 +211,9 @@ def teach(adversary: LanguageModel, defender: LanguageModel,
     return step, reward(step)
 
 
-# eps, rew, convo = episode(adversary, defender, ["What are you doing?", "Oh he did?"])
+# eps, rew, conbo = episode(adversary, defender, ["What are you doing?", "Oh he did?"])
+# len(conbo)
+# conbo[0]
 # print(convo[6])
 
 # len(convo)
