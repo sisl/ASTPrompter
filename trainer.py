@@ -28,6 +28,9 @@ class Trainer:
             mini_batch_size=args.batch_size,
             batch_size=args.batch_size,
             kl_penalty="full",
+            use_score_scaling=True,
+            use_score_norm=True,
+            score_clip=0.9,
             **kwargs
         )
 
@@ -39,7 +42,10 @@ class Trainer:
         # just use it in our inference wrapper
 
         self.adversary = LanguageModel(dont_init=True)
-        adversary_model = AutoModelForCausalLMWithValueHead.from_pretrained(config.model_name)
+        if args.warm_start:
+            adversary_model = AutoModelForCausalLMWithValueHead.from_pretrained(args.warm_start)
+        else:
+            adversary_model = AutoModelForCausalLMWithValueHead.from_pretrained(config.model_name)
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
 
         # our defender can be initialized normally 
@@ -204,12 +210,12 @@ class Trainer:
             return
 
         # Run PPO step
-        # try:
-        stats = self.ppo.step([torch.tensor(i) for i in query_ids],
-                              [torch.tensor(i) for i in response_ids],
-                              list(rewards.unbind(0)))
-        # except RuntimeError as e:
-            # return
+        try:
+            stats = self.ppo.step([torch.tensor(i) for i in query_ids],
+                                  [torch.tensor(i) for i in response_ids],
+                                  list(rewards.unbind(0)))
+        except RuntimeError as e:
+            return
 
         # we need to send rewards to cuda because ddp needs them on the
         # same device for logging

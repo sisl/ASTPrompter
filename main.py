@@ -60,6 +60,10 @@ if __name__ == "__main__":
                         help='prefix of the model save dir, default "models"')
     parser.add_argument('--save_name', type=str, default=None,
                         help='the folder place to save our model')
+    parser.add_argument('--warm_start', type=str, default=None,
+                        help='start your policy here')
+    parser.add_argument('--wandb', action="store_true", default=False,
+                        help='use wandb?')
     args = parser.parse_args()
 
     # if we are CPU, we have to do it here BEFORE argparse
@@ -76,7 +80,7 @@ if __name__ == "__main__":
                           "wandb": {
                               "entity": "jemoka", 
                               # comment the line below out to log
-                              "mode": "disabled"
+                              "mode": None if args.wandb else "disabled"
                           }
                       })
 
