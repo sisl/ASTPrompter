@@ -1,7 +1,7 @@
 from trl import AutoModelForCausalLMWithValueHead
 from transformers import AutoTokenizer
 
-checkpoint = "./models/ppo_model_gpt2_toxbase_decay_slower_checkpoint"
+checkpoint = "./models/ppo_model_toxbase_checkpoint"
 
 model = AutoModelForCausalLMWithValueHead.from_pretrained(checkpoint)
 model_base = AutoModelForCausalLMWithValueHead.from_pretrained("openai-community/gpt2")
@@ -16,6 +16,11 @@ while True:
 
     res = tokenizer.batch_decode(res)[0]
     res_orig = tokenizer.batch_decode(res_orig)[0]
+
+    print("==== POLICY ====")
+    print(res)
+    print("==== BASE ====")
+    print(res_orig)
 
     breakpoint()
 

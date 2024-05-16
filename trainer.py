@@ -218,18 +218,26 @@ class Trainer:
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]
         response_ids = self.adversary.tokenizer(rs)["input_ids"]
+
+        # trl isn't happy if we have a batch size that don't match
+        if len(query_ids) != self.batch_size:
+            return
     
         # if the AST said nothing, don't run anything 
         if 0 in [len(i) for i in response_ids]:
             return
 
         # Run PPO step
-        try:
-            stats = self.ppo.step([torch.tensor(i) for i in query_ids],
-                                  [torch.tensor(i) for i in response_ids],
-                                  list(rewards.unbind(0)))
-        except RuntimeError as e:
-            return
+        # try:
+        # we want a list, one for each batch elemnet for the batch
+        # also, we crop the input in case they are too long to fix the context
+        # we proirtize keeping the end of the input and the beginning of
+        # the output
+        stats = self.ppo.step([torch.tensor(i)[-959:] for i in query_ids],
+                              [torch.tensor(i)[:64] for i in response_ids],
+                              list(rewards.unbind(0)))
+        # except RuntimeError as e:
+            # return
 
         # we need to send rewards to cuda because ddp needs them on the
         # same device for logging

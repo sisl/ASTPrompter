@@ -143,8 +143,6 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
                                     min_new_tokens=-1, top_p=1, top_k=0.0, 
                                     # temperature=0.5,
                                     do_sample=True, dont_stop=True, skip_special_tokens=True)
-            if len(ut) < 20:
-                breakpoint()
             new_utterance_ast = ut.replace(prompt, "").strip()
 
             convo.append(new_utterance_ast.strip())
