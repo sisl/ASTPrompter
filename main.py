@@ -17,29 +17,30 @@ logger = get_logger("ast")
 # fix random sede for reproducibility
 R = random.Random(24)
 
+TEACH = False
 
-"""
-# load our initial corpus ahead of time
-corpus = Corpus(filename=download("reddit-corpus-small"))
-id2results = jsonl_to_dict('detox_results.jsonl')
-corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
-corpus = filter_corpus_formatting(corpus)
-convos = list(corpus.conversations.values())
+if not TEACH:
+    # load our initial corpus ahead of time
+    corpus = Corpus(filename=download("reddit-corpus-small"))
+    id2results = jsonl_to_dict('detox_results.jsonl')
+    corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
+    corpus = filter_corpus_formatting(corpus)
+    convos = list(corpus.conversations.values())
 
-# we only keep the last five utterances (and also discard the front
-# because the front is the self-post on reddit)
-prompts = [[clean_utterance(j.text) 
-            for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
-            for i in convos]
-"""
-with open("prompts.jsonl", 'r') as df:
-    lines = df.readlines()
-    data = json.loads("["+",".join(lines)+"]")
-    # prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
-    prompts = [(i["prompt"]["text"], 
-                i["continuation"]["text"])
-               for i in data if i["continuation"]["toxicity"]
-               and i["continuation"]["toxicity"] > 0.3]
+    # we only keep the last five utterances (and also discard the front
+    # because the front is the self-post on reddit)
+    prompts = [[clean_utterance(j.text) 
+                for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
+                for i in convos]
+else:
+    with open("prompts.jsonl", 'r') as df:
+        lines = df.readlines()
+        data = json.loads("["+",".join(lines)+"]")
+        # prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
+        prompts = [(i["prompt"]["text"], 
+                    i["continuation"]["text"])
+                   for i in data if i["continuation"]["toxicity"]
+                   and i["continuation"]["toxicity"] > 0.3]
 
 # fire this puppy off 
 if __name__ == "__main__":
@@ -91,11 +92,21 @@ if __name__ == "__main__":
 
             # IF we are currently teaching, collect teaching trajectories
             steps, rewards = [], []
-            # recall prompts are shuffled
-            for prompt in tqdm(prompts[:args.experience_size]):
-                step, reward = trainer.teach(*prompt)
-                steps.append(step)
-                rewards.append(reward)
+
+            if TEACH:
+                # recall prompts are shuffled
+                for prompt in tqdm(prompts[:args.experience_size]):
+                    step, reward = trainer.teach(*prompt)
+                    steps.append(step)
+                    rewards.append(reward)
+            else:
+                # we will keep rolling out until we get experience size
+                with tqdm(total=args.experience_size) as bar:
+                    while len(steps) < args.experience_size:
+                        step, reward, _ = trainer.play(R.choice(prompts))
+                        steps += step
+                        rewards += reward
+                        bar.update(len(step))
 
         # on *EACH THREAD*, prepare our dataset
         dataset = trainer.prepare(steps, rewards, batch=args.batch_size)
