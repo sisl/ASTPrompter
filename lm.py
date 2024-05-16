@@ -53,7 +53,7 @@ class LanguageModel(object):
     def to(self, device):
         self.model = self.model.to(device)
 
-    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=48, dont_stop=False, **kwargs):
+    def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=48, dont_stop=False, skip_special_tokens=False, **kwargs):
         """Rollout our policy until a stop sequence.
 
         Parameters
@@ -101,7 +101,7 @@ class LanguageModel(object):
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens, 
                                                 pad_token_id=self.tokenizer.eos_token_id)
 
-        return self.tokenizer.batch_decode(generated_ids)[0]
+        return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=skip_special_tokens)[0]
 
     @property
     def device(self):

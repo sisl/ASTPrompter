@@ -2,6 +2,7 @@ from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
+from accelerate.utils.tqdm import tqdm
 from transformers import AutoTokenizer
 from lm import *
 from environment import *
@@ -24,11 +25,13 @@ class Trainer:
         config = PPOConfig(
             model_name=model,
             learning_rate=args.lr,
-            mini_batch_size=horizon,
-            batch_size=horizon,
+            mini_batch_size=args.batch_size,
+            batch_size=args.batch_size,
             kl_penalty="full",
             **kwargs
         )
+
+        self.batch_size = args.batch_size
 
         # because the PPO wrapper chops the end off and add
         # a value head, we can't just naively initalize a GPT-2
@@ -84,13 +87,15 @@ class Trainer:
                                                  if postfix != ""
                                                  else "").strip()))
     
-    def prepare(self, prompts, batch=1):
+    def prepare(self, steps, rewards, batch=1):
         """Make a distributed dataset from stings for training.
 
         Parameters
         ----------
-        prompts : List[List[str]]
+        steps : List[ASTStep]
             Prompt strings.
+        rewards : List[float]
+            The rewards which the steps got.
 
         Returns
         -------
@@ -99,12 +104,13 @@ class Trainer:
         """
 
         class TrainerDataset(Dataset):
-            def __init__(self, data):
+            def __init__(self, data, reward):
                 super().__init__()
-
                 self.__data = data
+                self.__reward = reward
+                assert len(self.__data) == self.__reward, "lengths fo reward and data are not the same lengths!"
             def __getitem__(self, x):
-                return self.__data[x]
+                return self.__data[x].query, self.__data[x].response, self.__reward[x]
             def __len__(self):
                 return len(self.__data)
 
@@ -130,11 +136,8 @@ class Trainer:
         
         # this should be a batch of one, so we index
         # to get rid of the outer shell
-        for i, batch in enumerate(iter(dataloader)):
-            if isinstance(batch, dict):
-                self.step(batch, log=(i % log_every == 0))
-            else:
-                self.step(batch[0], log=(i % log_every == 0))
+        for i, batch in enumerate(tqdm(iter(dataloader), total=len(dataloader))):
+            self.step(batch, log=(i % log_every == 0))
 
     def play(self, prompt):
         """self play to run the prompt
@@ -156,37 +159,38 @@ class Trainer:
 
         return eps, rewards, convo
 
-    def step(self, prompt, log=False):
+    def teach(self, prompt, response):
+        """self play to run the prompt
+
+        Parameters
+        ----------
+        prompt : str
+            the prompt to elicit
+        response : str
+            what the the AST should respond
+
+        Returns
+        -------
+        ASTStep, float
+            Step, reward.
+        """
+        
+        return teach(self.adversary, self.defender,
+                     prompt, response, device=self.accelerator.device)
+
+    def step(self, batch, log=False):
         """Optimize our model by a single step.
 
         Parameters
         ----------
-        prompt : List[str]
+        batch : (List[ASTStep], List[rewards])
             The prompt to optimize!
         log : bool
             whether to log
         """
 
-        force_ast = None
-
-        if isinstance(prompt, dict):
-            force_ast = prompt["continuation"]
-            prompt = prompt["prompt"]
-        
-        # run the prompt
-        # try:
-        eps, rewards, _ = episode(self.adversary, self.defender, prompt, force_ast=force_ast,
-                                  horizon=self.horizon, device=self.accelerator.device)
-        # except RuntimeError as e:
-            # logger.warning(f"encountered runtime error with episode, skipping!")
-            # return
-        rewards_list = rewards
+        qs, rs, rewards_list = batch
         rewards = torch.tensor(rewards).float()
-
-        # the environment has already prepared query and response
-        # tensors for us. to edit that behavior, change the environment
-        qs = [i.query for i in eps]
-        rs = [i.response for i in eps]
 
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]

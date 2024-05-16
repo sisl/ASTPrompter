@@ -35,11 +35,10 @@ with open("prompts.jsonl", 'r') as df:
     lines = df.readlines()
     data = json.loads("["+",".join(lines)+"]")
     # prompts = [i["prompt"]["text"] for i in data if i["challenging"] == True]
-    prompts = [{"prompt": i["prompt"]["text"], 
-                "continuation": i["continuation"]["text"]} 
-            for i in data 
-            if i["continuation"]["toxicity"] and
-            i["continuation"]["toxicity"] > 0.3]
+    prompts = [(i["prompt"]["text"], 
+                i["continuation"]["text"])
+               for i in data if i["continuation"]["toxicity"]
+               and i["continuation"]["toxicity"] > 0.3]
 
 R.shuffle(prompts)
 
@@ -50,6 +49,8 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=100,
                         help='number of epochs to train')
     parser.add_argument('--horizon', type=int, default=4,
+                        help='horizon of each episode')
+    parser.add_argument('--batch_size', type=int, default=32,
                         help='horizon of each episode')
     parser.add_argument('--lr', type=float, default=1.41e-6,
                         help='learning rate')
@@ -91,7 +92,24 @@ if __name__ == "__main__":
     
     # good vibes time
     for epoch in range(args.epochs):
-        trainer.epoch(dl, log_every=10)
+        # experience the experience
+        with trainer.accelerator.main_process_first():
+
+            # IF we are currently teaching, collect teaching
+            # trajectories
+            steps, rewards = [], []
+            for prompt in prompts:
+                step, reward = trainer.teach(*prompt)
+                steps.append(step)
+                rewards.append(reward)
+
+        # on *EACH THREAD*, prepare our dataset
+        dataset = trainer.prepare(steps, rewards, batch=args.batch_size)
+        
+        # replay the experience
+        trainer.epoch(dataset, log_every=10)
+
+        # have a good time
 
         # epoch_rewards = []
 
