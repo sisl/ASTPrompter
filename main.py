@@ -17,7 +17,7 @@ logger = get_logger("ast")
 # fix random sede for reproducibility
 R = random.Random(24)
 
-TEACH = False
+TEACH = True
 
 if not TEACH:
     # load our initial corpus ahead of time
@@ -62,6 +62,8 @@ if __name__ == "__main__":
                         help='the folder place to save our model')
     parser.add_argument('--warm_start', type=str, default=None,
                         help='start your policy here')
+    parser.add_argument('--decay_factor', type=float, default=0.99,
+                        help='how much to decay the lr per step, default 0.99')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
     args = parser.parse_args()
@@ -109,10 +111,13 @@ if __name__ == "__main__":
                 # we will keep rolling out until we get experience size
                 with tqdm(total=args.experience_size) as bar:
                     while len(steps) < args.experience_size:
-                        step, reward, _ = trainer.play(R.choice(prompts))
-                        steps += step
-                        rewards += reward
-                        bar.update(len(step))
+                        try:
+                            step, reward, _ = trainer.play(R.choice(prompts))
+                            steps += step
+                            rewards += reward
+                            bar.update(len(step))
+                        except RuntimeError:
+                            continue
 
         # on *EACH THREAD*, prepare our dataset
         dataset = trainer.prepare(steps, rewards, batch=args.batch_size)

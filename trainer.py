@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
 from accelerate.utils.tqdm import tqdm
 from transformers import AutoTokenizer
+from torch.optim.lr_scheduler import ExponentialLR
+from torch.optim import AdamW
 from lm import *
 from environment import *
 import torch
@@ -59,10 +61,20 @@ class Trainer:
         self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
         self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
+        self.optimizer = AdamW( 
+            filter(lambda p: p.requires_grad, adversary_model.parameters()),
+            lr=args.lr,
+            # https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
+            eps=1e-5
+        )
+        self.scheduler = ExponentialLR(self.optimizer, args.decay_factor)
+
         self.ppo = PPOTrainer(
             model = adversary_model,
             tokenizer = self.adversary.tokenizer,
-            config = config
+            config = config,
+            optimizer = self.optimizer,
+            lr_scheduler = self.scheduler
         )
 
         # because the accelerator may move models to weird places, we 
