@@ -47,6 +47,8 @@ class Trainer:
             # we do want our distribution to deviate quite a bit, but
             # not super much
             target=10,
+            # https://huggingface.co/blog/the_n_implementation_details_of_rlhf_with_ppo
+            whiten_rewards=args.whiten_rewards,
             **kwargs
         )
 
@@ -79,7 +81,7 @@ class Trainer:
             filter(lambda p: p.requires_grad, adversary_model.parameters()),
             lr=args.lr,
             # https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
-            eps=1e-5
+            eps=1e-7
         )
         self.scheduler = ExponentialLR(self.optimizer, args.decay_factor)
 

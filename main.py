@@ -85,6 +85,8 @@ if __name__ == "__main__":
                         help='use wandb?')
     parser.add_argument('--teach', action="store_true", default=False,
                         help='force teach the AST model instead of rollout?')
+    parser.add_argument('--whiten_rewards', action="store_true", default=False,
+                        help='whiten rewards?')
     args = parser.parse_args()
 
     if args.teach:
