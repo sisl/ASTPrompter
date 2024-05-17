@@ -43,10 +43,11 @@ class Trainer:
             max_grad_norm=args.gradient_clip,
             ratio_threshold=args.ratio_threshold,
             vf_coef=args.vf_scale,
+            # whiten_rewards=True,
             # for our problem setting, this seems good?
             # we do want our distribution to deviate quite a bit, but
             # not super much
-            target=10,
+            # target=4,
             **kwargs
         )
 
