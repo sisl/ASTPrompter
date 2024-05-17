@@ -44,7 +44,9 @@ class Trainer:
             ratio_threshold=args.ratio_threshold,
             vf_coef=args.vf_scale,
             # for our problem setting, this seems good?
-            target=20,
+            # we do want our distribution to deviate quite a bit, but
+            # not super much
+            target=10,
             **kwargs
         )
 

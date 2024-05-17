@@ -16,6 +16,8 @@ logger = get_logger("ast")
 
 # fix random sede for reproducibility
 R = random.Random(24)
+# to test if its data dependent
+# R = random.Random(54)
 
 # TEACH = False
 
