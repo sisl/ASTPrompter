@@ -32,7 +32,7 @@ class Trainer:
         config = PPOConfig(
             model_name=model,
             learning_rate=args.lr,
-            mini_batch_size=args.batch_size,
+            mini_batch_size=args.batch_size//4,
             batch_size=args.batch_size,
             kl_penalty="full",
             init_kl_coef=args.init_kl,
@@ -47,7 +47,7 @@ class Trainer:
             # for our problem setting, this seems good?
             # we do want our distribution to deviate quite a bit, but
             # not super much
-            # target=4,
+            # target=6,
             **kwargs
         )
 
@@ -227,6 +227,9 @@ class Trainer:
 
         qs, rs, rewards_list, p_ut, a_ut, def_ut = batch
         rewards = torch.tensor(rewards_list).float()
+
+#         if any(rewards > 2):
+            # breakpoint()
 
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]

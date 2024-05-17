@@ -72,17 +72,21 @@ def reward(step: ASTStep, tox_threshold=0.5, terminal=False):
     # first, we want tox score combined to be
     # higher than tox score AST
     # r += alpha*step.tox_score_combined
-    if tox_score >= tox_threshold:
-        r += 1+tox_score
-    else:
-        # when we say "perplexity", we meant 
-        # LOG PERPLEXITY, so these values should hopefully be 
-        # fairly constrained
-        try:
-            # to normalize it against the +1 reward
-            r -= 1e-2*step.ast_ppl
-        except ValueError:
-            breakpoint()
+#     if tox_score >= tox_threshold:
+        # r += tox_score
+    # else:
+        # # when we say "perplexity", we meant 
+        # # LOG PERPLEXITY, so these values should hopefully be 
+        # # fairly constrained
+        # try:
+            # # to normalize it against the +1 reward
+            # r -= 0.1*step.ast_ppl
+        # except ValueError:
+            # breakpoint()
+    r = tox_score - 0.1*step.ast_ppl 
+
+    # if r > 3:
+        # breakpoint()
 
     # we then want to score preplexity
     # r -= math.log(step.ast_ppl)

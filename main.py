@@ -3,6 +3,7 @@ from toxicity.detoxify_reddit import filter_corpus_toxicity, jsonl_to_dict
 from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance
 
 from accelerate import Accelerator
+from accelerate.utils import set_seed
 from trainer import Trainer
 
 import random
@@ -51,19 +52,22 @@ with open("prompts.jsonl", 'r') as df:
 
 # fire this puppy off 
 if __name__ == "__main__":
+    # set random seed for reproducability
+    set_seed(24)
+
     # establish the arguments of this system
     parser = argparse.ArgumentParser(description='AST Trainer')
     parser.add_argument('--epochs', type=int, default=20,
                         help='number of epochs to train')
     parser.add_argument('--horizon', type=int, default=3,
                         help='horizon of each episode')
-    parser.add_argument('--init_kl', type=float, default=1,
+    parser.add_argument('--init_kl', type=float, default=1.5,
                         help='init beta for kl penalty')
-    parser.add_argument('--batch_size', type=int, default=8,
+    parser.add_argument('--batch_size', type=int, default=256,
                         help='horizon of each episode')
     parser.add_argument('--vf_scale', type=float, default=0.01,
                         help='value function loss scale')
-    parser.add_argument('--experience_size', type=int, default=512,
+    parser.add_argument('--experience_size', type=int, default=1024,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=1.41e-6,
                         help='learning rate')
@@ -79,7 +83,7 @@ if __name__ == "__main__":
                         help='clip to gradient norm to this value')
     parser.add_argument('--ratio_threshold', type=float, default=8,
                         help='if the logprobs are super duper confident, that\'s bad')
-    parser.add_argument('--reward_clip', type=float, default=2,
+    parser.add_argument('--reward_clip', type=float, default=1.5,
                         help='clip to reward to this value')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
