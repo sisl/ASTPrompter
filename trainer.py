@@ -27,7 +27,7 @@ class Trainer:
         self.horizon = args.horizon
 
         # initialize early the accelator
-        self.accelerator = Accelerator(**kwargs.get(accelerator_kwargs, {}),
+        self.accelerator = Accelerator(**kwargs.get("accelerator_kwargs", {}),
                                        log_with="wandb" if args.wandb else None)
         if args.wandb:
             self.accelerator.init_trackers(
@@ -45,8 +45,8 @@ class Trainer:
         if args.warm_start:
             adversary_model = AutoModelForCausalLM.from_pretrained(args.warm_start)
         else:
-            adversary_model = AutoModelForCausalLM.from_pretrained(config.model_name)
-        self.adversary.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+            adversary_model = AutoModelForCausalLM.from_pretrained(model)
+        self.adversary.tokenizer = AutoTokenizer.from_pretrained(model)
 
         # our defender can be initialized normally 
         # and immeditaley frozen
@@ -61,14 +61,14 @@ class Trainer:
 
         # all the mishmash to get
         self.beta = args.beta
-        optimizer = AdamW(self.adversary.model.parameters(), lr=args.lr)
+        optimizer = AdamW(adversary_model.parameters(), lr=args.lr)
         scheduler = LambdaLR(optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / (args.warmup_steps + 1)))
 
         # because the accelerator may move models to weird places, we 
         # account for that
         (self.adversary.model, self.defender.model,
-         self.optimizer, self.scheduler) = self.ppo.accelerator.prepare(self.defender.model, adversary_model,
-                                                                        optimizer, scheduler)
+                self.optimizer, self.scheduler) = self.accelerator.prepare(adversary_model, self.defender.model,
+                        optimizer, scheduler)
 
         save_name = f"dpo_model_{model.split('/')[-1]}"
         if args.save_name:
@@ -105,11 +105,9 @@ class Trainer:
         """
 
         class TrainerDataset(Dataset):
-            def __init__(self, data, reward):
+            def __init__(self, data):
                 super().__init__()
                 self.__data = data
-                self.__reward = reward
-                assert len(self.__data) == len(self.__reward), "lengths fo reward and data are not the same lengths!"
             def __getitem__(self, x):
                 return (self.__data[x].query+self.__data[x].response_w,
                         self.__data[x].query+self.__data[x].response_l)
@@ -172,7 +170,7 @@ class Trainer:
         chosen_rewards = self.beta * (policy_chosen_logps - reference_chosen_logps).detach()
         rejected_rewards = self.beta * (policy_rejected_logps - reference_rejected_logps).detach()
 
-        return loses, chosen_rewards, rejected_rewards
+        return losses, chosen_rewards, rejected_rewards
 
     def step(self, batch, log=False):
         """Optimize our model by a single step.
@@ -207,11 +205,11 @@ class Trainer:
             "rewards/rejected": rejected_rewards.cpu().numpy().tolist(),
             "rewards/reward_accuracy": reward_accuracies.cpu().numpy().tolist(),
             "rewards/reward_margin": (chosen_rewards - rejected_rewards).cpu().numpy().tolist(),
-            "policy/logprobs_chosen": adversary_logprobs_win.cpu().numpy().tolist(),
-            "policy/logprobs_rejected": adversary_logprobs_loss.cpu().numpy().tolist(),
-            "ref/logprobs_chosen": defender_logprobs_win.cpu().numpy().tolist(),
-            "ref/logprobs_rejected": defender_logprobs_loss.cpu().numpy().tolist(),
-            "training/loss": loses.mean().cpu().item(),
+            "policy/logprobs_chosen": adversary_logprobs_win.detach().cpu().numpy().tolist(),
+            "policy/logprobs_rejected": adversary_logprobs_loss.detach().cpu().numpy().tolist(),
+            "ref/logprobs_chosen": defender_logprobs_win.detach().cpu().numpy().tolist(),
+            "ref/logprobs_rejected": defender_logprobs_loss.detach().cpu().numpy().tolist(),
+            "training/loss": loses.mean().detach().cpu().item(),
         }
 
         return loses.mean(), metrics

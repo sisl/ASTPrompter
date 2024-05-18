@@ -183,9 +183,11 @@ class LanguageModel(object):
 
         # force a pad token
         self.tokenizer.pad_token = self.tokenizer.eos_token
-        
+        self.tokenizer.truncation_side = "left"
+
         # combine the input and output and forward pass
-        y_enc = self.tokenizer(ys, return_tensors="pt", padding=True)
+        y_enc = self.tokenizer(ys, return_tensors="pt", padding=True, 
+                truncation=True, max_length=1024).to(device if device else self.device)
         underlying = self.model
         if isinstance(underlying, DDP):
             underlying = self.model.module

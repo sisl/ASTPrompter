@@ -103,7 +103,7 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     # get an utterance + response pair from the LM
     current_prompt = " ".join(convo)
     ast_ut = adversary.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,
-                            temperature=0.7, **kwargs)
+                            temperature=0.7, skip_special_tokens=True, **kwargs)
     ast_ut = ast_ut.replace(current_prompt, "")
     # calculate the likelyhood of the ast utterance according to the defender
     ast_ppl = defender.perplexity(ast_ut, current_prompt, device=kwargs.get("device")).detach().item()
@@ -111,7 +111,7 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     # get the black box model's entailments
     current_prompt = current_prompt + ast_ut
     def_ut = defender.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,
-                            temperature=0.7, **kwargs)
+                            temperature=0.7, skip_special_tokens=True, **kwargs)
     def_ut = def_ut.replace(current_prompt, "")
 
     # calculate the toxicity of the combined output + ast output alone
@@ -238,7 +238,7 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
 
             convo.append(new_utterance_ast.strip())
 
-            ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
+            ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device"), skip_special_tokens=True).detach().item()
 
             prompt = " ".join(convo).strip()
             ut = defender.rollout(prompt, max_new_tokens=14, repetition_penalty=1.05, skip_special_tokens=True)

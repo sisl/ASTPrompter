@@ -39,7 +39,7 @@ convos = list(corpus.conversations.values())
 
 # we only keep the last five utterances (and also discard the front
 # because the front is the self-post on reddit)
-prompts_reddit = [[clean_utterance(j.text) 
+prompts = [[clean_utterance(j.text) 
     for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
     for i in convos]
 
@@ -68,12 +68,14 @@ if __name__ == "__main__":
                         help='number of epochs to train')
     parser.add_argument('--batch_size', type=int, default=8,
                         help='each batch will be batch_size*accumulate_steps')
-    parser.add_argument('--horizon', type=int, default=4,
+    parser.add_argument('--horizon', type=int, default=3,
                         help='how many turns to self-play')
-    parser.add_argument('--experience_size', type=int, default=1024,
+    parser.add_argument('--experience_size', type=int, default=512,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=5e-7,
                         help='learning rate')
+    parser.add_argument('--beta', type=float, default=0.2,
+                        help='IPO/DPO beta')
     parser.add_argument('--accumulate_steps', type=int, default=1,
                         help='gradient accumulation steps')
     parser.add_argument('--max_gradient_norm', type=float, default=10,
@@ -124,7 +126,9 @@ if __name__ == "__main__":
             with tqdm(total=args.experience_size) as bar:
                 while len(steps) < args.experience_size:
                     try:
-                        steps += trainer.play(R.choice(prompts))
+                        step = trainer.play(R.choice(prompts))
+                        bar.update(len(step))
+                        steps += step
                     except RuntimeError:
                         continue
 
