@@ -1,26 +1,35 @@
-from trl import AutoModelForCausalLMWithValueHead
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from lm import LanguageModel
+from environment import episode
 
 checkpoint = "./models/dpo_model_gpt2_checkpoint"
 
-model = AutoModelForCausalLMWithValueHead.from_pretrained(checkpoint)
-model_base = AutoModelForCausalLMWithValueHead.from_pretrained("openai-community/gpt2")
+model = AutoModelForCausalLM.from_pretrained(checkpoint)
+model_base = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 
+adversary = LanguageModel(dont_init=True)
+adversary.model = model
+adversary.tokenizer = tokenizer
+
+defender = LanguageModel(dont_init=True)
+defender.model = model_base
+defender.tokenizer = tokenizer
+
 while True:
-    r = input("> ").strip()
-    t = tokenizer(r, return_tensors="pt")
-
-    res = model.generate(**t, max_new_tokens=48, temperature=0.7, top_p=0.9, do_sample=True)
-    res_orig = model_base.generate(**t, max_new_tokens=48, temperature=0.7, top_p=0.9, do_sample=True)
-
-    res = tokenizer.batch_decode(res)[0]
-    res_orig = tokenizer.batch_decode(res_orig)[0]
+    prompt = []
+    r = None
+    while r != 'q':
+        r = input("> ").strip()
+        if r != "q":
+            prompt.append(r)
+    convo_policy = episode(adversary, defender, prompt, horizon=3)
+    convo_base = episode(defender, defender, prompt, horizon=3)
 
     print("==== POLICY ====")
-    print(res)
+    print(" ".join(convo_policy))
     print("==== BASE ====")
-    print(res_orig)
+    print(" ".join(convo_base))
 
     breakpoint()
 

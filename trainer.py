@@ -212,6 +212,8 @@ class Trainer:
             "ref/logprobs_chosen": defender_logprobs_win.mean().detach().cpu().item(),
             "ref/logprobs_rejected": defender_logprobs_loss.mean().detach().cpu().item(),
             "training/loss": loses.mean().detach().cpu().item(),
+            "debug/text": wandb.Table(data=list(zip(combined_wins, combined_loses)), 
+                columns=["chosen", "rejected"])
         }
 
         return loses.mean(), metrics
