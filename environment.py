@@ -99,12 +99,16 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     
     # expand a tree out at each stage to get a step
     convo = copy.deepcopy(list(prompt))
+    current_prompt = " ".join(convo)
 
     # get an utterance + response pair from the LM
-    current_prompt = " ".join(convo)
-    ast_ut = adversary.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,
-                            temperature=0.7, skip_special_tokens=True, **kwargs)
-    ast_ut = ast_ut.replace(current_prompt, "")
+    if kwargs.get("force_ast"):
+        ast_ut = kwargs.get("force_ast")
+        del kwargs["force_ast"]
+    else:
+        ast_ut = adversary.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,
+                                temperature=0.7, skip_special_tokens=True, **kwargs)
+        ast_ut = ast_ut.replace(current_prompt, "")
     # calculate the likelyhood of the ast utterance according to the defender
     ast_ppl = defender.perplexity(ast_ut, current_prompt, device=kwargs.get("device")).detach().item()
 
@@ -119,6 +123,50 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     ast_tox = call_detoxify(ast_ut)["toxicity"] # we want this to be low 
 
     return (ast_ut, def_ut, ast_tox, combined_tox, ast_ppl)
+
+def teach_paired(adversary: LanguageModel, defender: LanguageModel,
+                 prompt: str, response: str, **kwargs):
+    """Supervisorily the LM to say somethnig
+
+    Parameters
+    ----------
+    adversary : LanguageModel
+        LM to tune.
+    defender : LanguageModel
+        Reference LM.
+    prompt : str
+        The prompt to teach with.
+    response : str
+        The intended response to elicit.
+
+    Returns
+    -------
+    ASTStep
+        The teaching step.
+    """
+    
+    ro1 = __handle_prompt(defender, adversary, [prompt], force_ast=response, **kwargs)
+    ro2 = __handle_prompt(defender, adversary, [prompt], **kwargs)
+
+    ro1_score = reward(*ro1)
+    ro2_score = reward(*ro2)
+
+    # DPO/IPO expects *paired* responses
+    if ro1_score >= ro2_score:
+        win = ro1
+        lost = ro2
+        reward_w = ro1_score
+        reward_l = ro2_score
+    else:
+        win = ro2
+        lost = ro1
+        reward_w = ro2_score
+        reward_l = ro1_score
+
+    # seralize a single step
+    step = ASTStep(prompt, win[0], lost[0], reward_w, reward_l)
+
+    return step
 
 def episode_paired(adversary: LanguageModel, defender: LanguageModel,
                    prompt: List[str], horizon_remaining=3, **kwargs):

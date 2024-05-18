@@ -75,6 +75,8 @@ if __name__ == "__main__":
                         help='each batch will be batch_size*accumulate_steps')
     parser.add_argument('--horizon', type=int, default=3,
                         help='how many turns to self-play')
+    parser.add_argument('--tox_mix', type=float, default=0.5,
+                        help='for how many EPISODES do we mix in a single toxicity prompt?')
     parser.add_argument('--experience_size', type=int, default=512,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=5e-7,
@@ -130,12 +132,17 @@ if __name__ == "__main__":
             # we will keep rolling out until we get experience size
             with tqdm(total=args.experience_size) as bar:
                 while len(steps) < args.experience_size:
-                    try:
-                        step = trainer.play(R.choice(prompts))
-                        bar.update(len(step))
-                        steps += step
-                    except RuntimeError:
-                        continue
+                    # check if we want to insert a teaching statement
+                    if R.random() < args.tox_mix:
+                        steps.append(trainer.teach(*R.choice(prompts_rtp)))
+                        bar.update(1)
+                    else:
+                        try:
+                            step = trainer.play(R.choice(prompts))
+                            bar.update(len(step))
+                            steps += step
+                        except RuntimeError:
+                            continue
 
         # on *EACH THREAD*, prepare our dataset
         dataset = trainer.prepare(steps, batch=args.batch_size)
