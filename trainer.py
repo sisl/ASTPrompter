@@ -126,6 +126,14 @@ class Trainer:
     def play(self, prompt):
         return episode_paired(self.adversary, self.defender, prompt, self.horizon)
 
+    def rollout(self, prompt, **kwargs):
+        current_prompt = prompt
+        def_ut = self.adversary.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,
+                                        temperature=0.7, skip_special_tokens=True, **kwargs)
+        def_ut = def_ut.replace(current_prompt, "")
+
+        return def_ut
+
     def epoch(self, dataloader, log_every=10):
         """Run an epoch of the data.
 
