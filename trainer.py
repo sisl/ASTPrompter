@@ -5,7 +5,7 @@ from accelerate import Accelerator
 from accelerate.utils.tqdm import tqdm
 from transformers import AutoTokenizer
 from torch.optim.lr_scheduler import ExponentialLR
-from torch.optim import AdamW
+from torch.optim import Adam
 from lm import *
 from peft import LoraConfig
 from environment import *
@@ -32,7 +32,7 @@ class Trainer:
         config = PPOConfig(
             model_name=model,
             learning_rate=args.lr,
-            mini_batch_size=args.batch_size,
+            mini_batch_size=args.batch_size//4,
             batch_size=args.batch_size,
             kl_penalty="full",
             init_kl_coef=args.init_kl,
@@ -43,12 +43,11 @@ class Trainer:
             max_grad_norm=args.gradient_clip,
             ratio_threshold=args.ratio_threshold,
             vf_coef=args.vf_scale,
+            # whiten_rewards=True,
             # for our problem setting, this seems good?
             # we do want our distribution to deviate quite a bit, but
             # not super much
-            target=10,
-            # https://huggingface.co/blog/the_n_implementation_details_of_rlhf_with_ppo
-            whiten_rewards=args.whiten_rewards,
+            # target=6,
             **kwargs
         )
 
@@ -77,7 +76,7 @@ class Trainer:
         self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
         self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
-        self.optimizer = AdamW( 
+        self.optimizer = Adam( 
             filter(lambda p: p.requires_grad, adversary_model.parameters()),
             lr=args.lr,
             # https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
@@ -229,16 +228,21 @@ class Trainer:
         qs, rs, rewards_list, p_ut, a_ut, def_ut = batch
         rewards = torch.tensor(rewards_list).float()
 
+#         if any(rewards > 2):
+            # breakpoint()
+
         # get input IDs for queries and responses, padded
         query_ids = self.adversary.tokenizer(qs)["input_ids"]
         response_ids = self.adversary.tokenizer(rs)["input_ids"]
 
         # trl isn't happy if we have a batch size that don't match
         if len(query_ids) != self.batch_size:
+            breakpoint()
             return
     
         # if the AST said nothing, don't run anything 
         if 0 in [len(i) for i in response_ids]:
+            breakpoint()
             return
 
         # Run PPO step

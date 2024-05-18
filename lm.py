@@ -153,7 +153,7 @@ class LanguageModel(object):
         # isolate the output components' probabilities; remember that
         # the last token omponent is one token beyond y (i.e. the final autoregression
         # token, beyond our value y, so we discard that)
-        cond_log_probs = torch.gather(res[:len(x_enc)], 1, (torch.tensor(x_enc)).unsqueeze(1).to(device if device else self.device))
+        cond_log_probs = torch.gather(res[:len(x_enc)-1], 1, (torch.tensor(x_enc)[1:]).unsqueeze(1).to(device if device else self.device))
         all_log_probs = torch.gather(res[:-1], 1, (torch.tensor(x_enc+y_enc)[1:]).unsqueeze(1).to(device if device else self.device))
 
         log_probs = all_log_probs.sum(0) - cond_log_probs.sum(0)
