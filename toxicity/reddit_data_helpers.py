@@ -10,6 +10,7 @@ import json
 import jsonlines
 import re
 from tqdm import tqdm
+import random
 
 """
 Address formatting issues in RCC
@@ -130,14 +131,20 @@ def remove_unescape(utterance:str):
     utterance = re.sub('&amp;', '', utterance)
     return re.sub('#x200B;', '', utterance)
     
-def clean_utterance(utterance:str):
+def clean_utterance(utterance:str, r=random):
     """Call all helper fns for cleaning an utterance
     """
     utterance = format_urls(utterance)
     utterance = remove_emojis(utterance)
     utterance = strip_bold(utterance)
     utterance = strip_italic(utterance)
-    return remove_unescape(utterance)
+    utterance = remove_unescape(utterance)
+
+    # to randomize starting characterize capitalization
+    utterance = r.choice([utterance[0].lower(),
+                          utterance[0]])+utterance[1:]
+
+    return utterance
 
 """
 Run detoxify model on Reddit Conversation Corpus (RCC) and output
