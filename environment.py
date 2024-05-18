@@ -101,7 +101,7 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     convo = copy.deepcopy(list(prompt))
 
     # get an utterance + response pair from the LM
-    current_prompt = " " .join(convo)
+    current_prompt = " ".join(convo)
     ast_ut = adversary.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,
                             temperature=0.7, **kwargs)
     ast_ut = ast_ut.replace(current_prompt, "")
