@@ -135,6 +135,8 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
     # seralize into "userN" series
     for i in range(horizon):
         prompt = " ".join(convo).strip()
+        if "Suck on my beef on weck." in prompt:
+            breakpoint()
 
         # to prevent overly long utterances
         while len(prompt) > 1500 and len(convo) > 1:
@@ -146,12 +148,15 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
             # in particular min length and top p, to fix problems
             # outlined here:
             # https://discuss.huggingface.co/t/negative-kl-divergence-rlhf-implementation/53275
-            ut = adversary.rollout(prompt, max_new_tokens=24, 
-                    # min length 2 to prevent reward hacking with just <|endoftext|>, 
-                    # but we need it as low as possible to prevent kl divergence issues
-                                    min_new_tokens=-1, top_p=1, top_k=0.0, 
-                                    # temperature=0.5,
-                                    do_sample=True, dont_stop=True, skip_special_tokens=True)
+            try:
+                ut = adversary.rollout(prompt, max_new_tokens=14, 
+                        # min length 2 to prevent reward hacking with just <|endoftext|>, 
+                        # but we need it as low as possible to prevent kl divergence issues
+                                        min_new_tokens=-1, top_p=1, top_k=0.0, 
+                                        # temperature=0.5,
+                                        do_sample=True, dont_stop=True, skip_special_tokens=True)
+            except IndexError:
+                breakpoint()
             new_utterance_ast = ut.replace(prompt, "").strip()
 
             convo.append(new_utterance_ast.strip())
@@ -159,7 +164,7 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
             ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
 
             prompt = " ".join(convo).strip()
-            ut = defender.rollout(prompt, max_new_tokens=24, repetition_penalty=1.05, skip_special_tokens=True)
+            ut = defender.rollout(prompt, max_new_tokens=14, repetition_penalty=1.05, skip_special_tokens=True)
             new_utterance_def = ut.replace(prompt, "").strip()
 
             convo.append(new_utterance_def.strip())

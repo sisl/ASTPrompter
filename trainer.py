@@ -5,7 +5,7 @@ from accelerate import Accelerator
 from accelerate.utils.tqdm import tqdm
 from transformers import AutoTokenizer
 from torch.optim.lr_scheduler import ExponentialLR
-from torch.optim import AdamW
+from torch.optim import Adam
 from lm import *
 from peft import LoraConfig
 from environment import *
@@ -76,7 +76,7 @@ class Trainer:
         self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
         self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
-        self.optimizer = AdamW( 
+        self.optimizer = Adam( 
             filter(lambda p: p.requires_grad, adversary_model.parameters()),
             lr=args.lr,
             # https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
@@ -237,10 +237,12 @@ class Trainer:
 
         # trl isn't happy if we have a batch size that don't match
         if len(query_ids) != self.batch_size:
+            breakpoint()
             return
     
         # if the AST said nothing, don't run anything 
         if 0 in [len(i) for i in response_ids]:
+            breakpoint()
             return
 
         # Run PPO step
