@@ -141,8 +141,11 @@ def clean_utterance(utterance:str, r=random):
     utterance = remove_unescape(utterance)
 
     # to randomize starting characterize capitalization
-    utterance = r.choice([utterance[0].lower(),
-                          utterance[0]])+utterance[1:]
+    try:
+        utterance = r.choice([utterance[0].lower(),
+                              utterance[0]])+utterance[1:]
+    except IndexError:
+        return ''
 
     return utterance
 

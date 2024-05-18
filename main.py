@@ -44,6 +44,9 @@ prompts = [[clean_utterance(j.text, R)
             if j.text.strip() != "[deleted]"
             and j.text.strip() != ""][1:][-2:]
            for i in convos]
+prompts = [[j for j in i if j.strip() != ""]
+        for i in prompts]
+prompts = [i for i in prompts if len(i) != 0]
 
 with open("prompts.jsonl", 'r') as df:
     lines = df.readlines()
