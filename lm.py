@@ -52,6 +52,7 @@ class LanguageModel(object):
 
     def to(self, device):
         self.model = self.model.to(device)
+        return self
 
     def rollout(self, prompt, stop_sequence=None, temperature=0.7, top_p=0.7, do_sample=True, max_new_tokens=48, dont_stop=False, skip_special_tokens=False, **kwargs):
         """Rollout our policy until a stop sequence.
