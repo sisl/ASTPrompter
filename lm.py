@@ -162,18 +162,14 @@ class LanguageModel(object):
         # sum of logs probs is product of probs
         return -log_probs[0]/len(y_enc)
 
-    def condition(self, y, x="", device=None):
-        """Obtain P(y|x) from the LM.
+    def logprob_batched(self, ys, device=None):
+        """Obtain P(y) from the LM.
 
-        REMEMBER: LOWER IS BETTER!
-
-        In particular, we define P(y|x) as the sum of logprobs
+        In particular, we define P(y) as the sum of logprobs
         of each individual element.
 
         Parameters
         ----------
-        x : str
-           The prompt.
         y : str
             The entailments from the prompt to calculate the probability of.
         device : Optional[torch.device]
@@ -182,13 +178,58 @@ class LanguageModel(object):
         Returns
         -------
         torch.Tensor: 1
-            The probability of y given x
+            The probability of y.
+        """
+
+        # force a pad token
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        
+        # combine the input and output and forward pass
+        y_enc = self.tokenizer(ys, return_tensors="pt", padding=True)
+        underlying = self.model
+        if isinstance(underlying, DDP):
+            underlying = self.model.module
+
+        # we need to chop off the front because we don't
+        # have the log prob of our first token
+        loss_mask = (y_enc["attention_mask"][:,1:] != 0)
+
+        # brrr
+        res = self.model(**y_enc)["logits"]
+        res = F.log_softmax(res, dim=2)
+
+        # isolate the output components' probabilities; remember that
+        # the last token omponent is one token beyond y (i.e. the final autoregression
+        # token, beyond our value y, so we discard that)
+        cond_log_probs = torch.gather(res[:,:-1,:], 2,
+                                      (y_enc["input_ids"][:,1:]).unsqueeze(2).to(device if device else self.device)).squeeze(2)
+
+        # sum of logs probs is product of probs
+        # and we apply the mask to ignore logprob of padding
+        return (cond_log_probs*loss_mask).sum(-1)
+
+    def logprob(self, y, device=None):
+        """Obtain P(y) from the LM.
+
+        In particular, we define P(y) as the sum of logprobs
+        of each individual element.
+
+        Parameters
+        ----------
+        y : str
+            The entailments from the prompt to calculate the probability of.
+        device : Optional[torch.device]
+            The device to push the model inputs.
+
+        Returns
+        -------
+        torch.Tensor: 1
+            The probability of y.
         """
         
         # combine the input and output and forward pass
-        x_enc = self.tokenizer([x])["input_ids"][0]
         y_enc = self.tokenizer([y])["input_ids"][0]
-        model_inputs = torch.tensor([x_enc+y_enc]).to(device if device else self.device)
+        model_inputs = torch.tensor([y_enc]).to(device if device else self.device)
         underlying = self.model
         if isinstance(underlying, DDP):
             underlying = self.model.module
@@ -205,15 +246,17 @@ class LanguageModel(object):
         # isolate the output components' probabilities; remember that
         # the last token omponent is one token beyond y (i.e. the final autoregression
         # token, beyond our value y, so we discard that)
-        cond_log_probs = torch.gather(res[:len(x_enc)], 1, (torch.tensor(x_enc)).unsqueeze(1).to(device if device else self.device))
-        all_log_probs = torch.gather(res[:-1], 1, (torch.tensor(x_enc+y_enc)[1:]).unsqueeze(1).to(device if device else self.device))
+        cond_log_probs = torch.gather(res[:-1], 1, (torch.tensor(y_enc)[1:]).unsqueeze(1).to(device if device else self.device))
 
         # sum of logs probs is product of probs
-        return all_log_probs - cond_log_probs
-
-
+        return cond_log_probs.sum()
 
 # lm = LanguageModel()
+
+# lm.logprob_batched(["Hello! How's the weather?", "jerk", "beef jerky samurai!", "shibat shebat shemibu", "Advertisement"])
+
+# lm.logprob("bjork there.")
+
 # breakpoint()
 # prompt1 = """
 # anon1: what do you still fucking want?

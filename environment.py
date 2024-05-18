@@ -122,6 +122,24 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
 
 def episode_paired(adversary: LanguageModel, defender: LanguageModel,
                    prompt: List[str], horizon_remaining=3, **kwargs):
+    """create paired aststep data
+
+    Parameters
+    ----------
+    adversary : LanguageModel
+        language model to tune
+    defender : LanguageModel
+        reference LM
+    prompt : List[str]
+        the string prompt to start with
+    horizon_remaining : how long is the horizon
+
+    Returns
+    -------
+    List[ASTStep]
+        the steps!
+    """
+    
     steps = []
 
     if horizon_remaining == 0:
