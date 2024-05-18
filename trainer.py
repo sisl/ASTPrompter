@@ -146,6 +146,7 @@ class Trainer:
                 metrics["training/gradient_norm"] = gn
                 self.optimizer.step()
                 self.scheduler.step()
+                self.optimizer.zero_grad()
 
             if (i % log_every == 0):
                 metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
