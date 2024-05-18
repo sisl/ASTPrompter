@@ -31,9 +31,9 @@ class Trainer:
                                        log_with="wandb" if args.wandb else None)
         if args.wandb:
             self.accelerator.init_trackers(
-                project_name=args.wandb_project_name, 
+                project_name="ast", 
                 config=vars(args),
-                init_kwargs=args.wandb_kwargs
+                init_kwargs=kwargs.get("wandb_kwargs", {})
             )
 
         # because the PPO wrapper chops the end off and add
