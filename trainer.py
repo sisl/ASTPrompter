@@ -203,14 +203,14 @@ class Trainer:
         reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
         metrics = {
-            "rewards/chosen": chosen_rewards.mean().cpu().numpy().tolist(),
-            "rewards/rejected": rejected_rewards.mean().cpu().numpy().tolist(),
-            "rewards/reward_accuracy": reward_accuracies.mean().cpu().numpy().tolist(),
-            "rewards/reward_margin": (chosen_rewards - rejected_rewards).mean().cpu().numpy().tolist(),
-            "policy/logprobs_chosen": adversary_logprobs_win.mean().detach().cpu().numpy().tolist(),
-            "policy/logprobs_rejected": adversary_logprobs_loss.mean().detach().cpu().numpy().tolist(),
-            "ref/logprobs_chosen": defender_logprobs_win.mean().detach().cpu().numpy().tolist(),
-            "ref/logprobs_rejected": defender_logprobs_loss.mean().detach().cpu().numpy().tolist(),
+            "rewards/chosen": chosen_rewards.mean().cpu().item(),
+            "rewards/rejected": rejected_rewards.mean().cpu().item(),
+            "rewards/reward_accuracy": reward_accuracies.mean().cpu().item(),
+            "rewards/reward_margin": (chosen_rewards - rejected_rewards).mean().cpu().item(),
+            "policy/logprobs_chosen": adversary_logprobs_win.mean().detach().cpu().item(),
+            "policy/logprobs_rejected": adversary_logprobs_loss.mean().detach().cpu().item(),
+            "ref/logprobs_chosen": defender_logprobs_win.mean().detach().cpu().item(),
+            "ref/logprobs_rejected": defender_logprobs_loss.mean().detach().cpu().item(),
             "training/loss": loses.mean().detach().cpu().item(),
         }
 
