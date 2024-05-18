@@ -1,4 +1,3 @@
-from trl import PPOConfig, PPOTrainer, DPOConfig, DPOTrainer
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
