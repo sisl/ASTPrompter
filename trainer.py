@@ -1,4 +1,4 @@
-from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
+from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead, DPOConfig, DPOTrainer
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
@@ -25,32 +25,6 @@ class Trainer:
 
         horizon = args.horizon
 
-        # this is to calculate the number of total steps
-        # which the kl horizon uses to penalize
-        kl_horizon = args.epochs * (args.experience_size // args.batch_size)
-
-        config = PPOConfig(
-            model_name=model,
-            learning_rate=args.lr,
-            mini_batch_size=args.batch_size//4,
-            batch_size=args.batch_size,
-            kl_penalty="full",
-            init_kl_coef=args.init_kl,
-            horizon=kl_horizon,
-            use_score_scaling=True,
-            use_score_norm=True,
-            score_clip=args.reward_clip,
-            max_grad_norm=args.gradient_clip,
-            ratio_threshold=args.ratio_threshold,
-            vf_coef=args.vf_scale,
-            # whiten_rewards=True,
-            # for our problem setting, this seems good?
-            # we do want our distribution to deviate quite a bit, but
-            # not super much
-            # target=6,
-            **kwargs
-        )
-
         self.batch_size = args.batch_size
 
         # because the PPO wrapper chops the end off and add
@@ -76,6 +50,17 @@ class Trainer:
         self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
         self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
+        config = DPOConfig(
+            #  See here: https://github.com/huggingface/trl/issues/1294
+            beta = 0.5, # For the IPO loss, beta is the regularization parameter denoted by tau in the paper.
+            label_smoothing = 0, # https://x.com/norabelrose/status/1728266549906325749
+            label_pad_token_id = self.defender.tokenizer.pad_token_id,
+            loss_type = "ipo",
+            truncation_mode = "keep_end", # Default, could not find source explaining when to use this vs keep_start
+            **kwargs
+        )
+
+        # Mithcell implementation uses RMSProp for efficiency but Adam should be fine
         self.optimizer = Adam( 
             filter(lambda p: p.requires_grad, adversary_model.parameters()),
             lr=args.lr,
@@ -84,8 +69,9 @@ class Trainer:
         )
         self.scheduler = ExponentialLR(self.optimizer, args.decay_factor)
 
-        self.ppo = PPOTrainer(
+        self.dpo = DPOTrainer(
             model = adversary_model,
+            model_ref = defense,
             tokenizer = self.adversary.tokenizer,
             config = config,
             optimizer = self.optimizer,
