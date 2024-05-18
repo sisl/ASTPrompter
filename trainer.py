@@ -148,6 +148,7 @@ class Trainer:
                 self.scheduler.step()
 
             if (i % log_every == 0):
+                metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
                 self.accelerator.log(metrics, step=self.global_step_counter_)
 
             self.global_step_counter_ += 1
@@ -201,14 +202,14 @@ class Trainer:
         reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
         metrics = {
-            "rewards/chosen": chosen_rewards.cpu().numpy().tolist(),
-            "rewards/rejected": rejected_rewards.cpu().numpy().tolist(),
-            "rewards/reward_accuracy": reward_accuracies.cpu().numpy().tolist(),
-            "rewards/reward_margin": (chosen_rewards - rejected_rewards).cpu().numpy().tolist(),
-            "policy/logprobs_chosen": adversary_logprobs_win.detach().cpu().numpy().tolist(),
-            "policy/logprobs_rejected": adversary_logprobs_loss.detach().cpu().numpy().tolist(),
-            "ref/logprobs_chosen": defender_logprobs_win.detach().cpu().numpy().tolist(),
-            "ref/logprobs_rejected": defender_logprobs_loss.detach().cpu().numpy().tolist(),
+            "rewards/chosen": chosen_rewards.mean().cpu().numpy().tolist(),
+            "rewards/rejected": rejected_rewards.mean().cpu().numpy().tolist(),
+            "rewards/reward_accuracy": reward_accuracies.mean().cpu().numpy().tolist(),
+            "rewards/reward_margin": (chosen_rewards - rejected_rewards).mean().cpu().numpy().tolist(),
+            "policy/logprobs_chosen": adversary_logprobs_win.mean().detach().cpu().numpy().tolist(),
+            "policy/logprobs_rejected": adversary_logprobs_loss.mean().detach().cpu().numpy().tolist(),
+            "ref/logprobs_chosen": defender_logprobs_win.mean().detach().cpu().numpy().tolist(),
+            "ref/logprobs_rejected": defender_logprobs_loss.mean().detach().cpu().numpy().tolist(),
             "training/loss": loses.mean().detach().cpu().item(),
         }
 
