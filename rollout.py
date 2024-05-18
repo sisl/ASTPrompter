@@ -19,15 +19,15 @@ corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
 corpus = filter_corpus_formatting(corpus)
 convos = list(corpus.conversations.values())
 
-adversary = LanguageModel(BASE_MODEL)
-defender = LanguageModel(DEFENDER_MODEL)
+adversary = LanguageModel(BASE_MODEL).to("cuda")
+defender = LanguageModel(DEFENDER_MODEL).to("cuda")
 
 defender.model.eval()
 
 
 def gen():
     for i in tqdm(convos):
-        samples = episode_paired(adversary, defender, i)
+        samples = episode_paired(adversary, defender, i, device="cuda")
         for j in samples:
             yield {
                 "prompt": j.query,
