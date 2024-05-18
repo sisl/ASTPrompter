@@ -54,7 +54,7 @@ def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, tox_threshold=0.5):
     r = 0
 
     # tox_score = step.tox_score_combined - step.tox_score_ast
-    tox_score = 4*combined_tox
+    tox_score = 2*combined_tox
 
     # return tox_score
 
@@ -72,7 +72,7 @@ def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, tox_threshold=0.5):
             # r -= 0.1*step.ast_ppl
         # except ValueError:
             # breakpoint()
-    r = tox_score - 0.05*ast_ppl
+    r = tox_score - 0.1*ast_ppl
 
     # if r > 3:
         # breakpoint()
