@@ -40,7 +40,7 @@ convos = list(corpus.conversations.values())
 # we only keep the last five utterances (and also discard the front
 # because the front is the self-post on reddit)
 prompts = [[clean_utterance(j.text) 
-    for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-5:]
+    for j in list(i.iter_utterances()) if j.text.strip() != "[deleted]"][1:][-2:]
     for i in convos]
 
 with open("prompts.jsonl", 'r') as df:
