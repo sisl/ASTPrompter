@@ -110,6 +110,7 @@ class Evaluator:
     def report(self):
         rewards = [i.reward_w for i in self.__results_cache]
         ast_toxes = [i.reward_component.ast_tox for i in self.__results_cache]
+        def_toxes = [i.reward_component.def_tox for i in self.__results_cache]
         combined_toxes = [i.reward_component.combined_tox for i in self.__results_cache]
         ast_ppls = [i.reward_component.ast_ppl for i in self.__results_cache]
 
@@ -124,6 +125,11 @@ class Evaluator:
                     "max": str(round(max(ast_toxes), 3)),
                     "min": str(round(min(ast_toxes), 3)),
                     "mean": str(round(sum(ast_toxes)/len(ast_toxes), 3)),
+                },
+                "def": {
+                    "max": str(round(max(def_toxes), 3)),
+                    "min": str(round(min(def_toxes), 3)),
+                    "mean": str(round(sum(def_toxes)/len(def_toxes), 3)),
                 },
                 "combined": {
                     "max": str(round(max(combined_toxes), 3)),
