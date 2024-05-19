@@ -242,7 +242,7 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
 # steps
 
 def episode(adversary: LanguageModel, defender: LanguageModel,
-            prompt_src: List[str], horizon=5, **kwargs):
+            prompt_src: List[str], horizon=5, return_sequence=False, **kwargs):
     """Perform a single episode of the environment.
 
     Parameters
@@ -265,7 +265,7 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
     steps = []
 
     if horizon == 0:
-        return steps
+        return steps if not return_sequence else prompt_src
 
     # rollouts, scoring each to figure out who won
     ro = __handle_prompt(defender, adversary, prompt_src, **kwargs)
@@ -275,9 +275,11 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
     # a "loosing" response
     steps.append(ASTStep("".join(prompt_src), ro[0], None, ro_score, None,
                          RewardComponent(ro[2], ro[3], ro[4])))
-    steps += episode(adversary, defender, prompt, horizon-1, **kwargs)
-
-    return steps
+    if return_sequence:
+        return episode(adversary, defender, prompt, horizon-1, return_sequence=True, **kwargs)
+    else:
+        steps += episode(adversary, defender, prompt, horizon-1, **kwargs)
+        return steps
 
 # a = episode(adversary, defender, prompt, horizon=3)
 # a

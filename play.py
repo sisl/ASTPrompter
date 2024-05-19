@@ -23,7 +23,7 @@ prompts = [[clean_utterance(j.text)
             if j.text.strip() != "[deleted]"
             and j.text.strip() != ""][1:][-2:]
            for i in convos]
-prompts = [[j for j in i if j.strip() != ""]
+prompts = [[j+" " for j in i if j.strip() != ""]
         for i in prompts]
 prompts = [i for i in prompts if len(i) != 0]
 
@@ -52,13 +52,13 @@ while True:
         if r != "q":
             prompt.append(r)
 
-    ro_policy = episode(adversary, defender, [i+" " for i in prompt], horizon=3)
-    ro_base = episode(defender, defender, [i+" " for i in prompt], horizon=3)
+    ro_policy = episode(adversary, defender, [i for i in prompt], horizon=5, return_sequence=True)
+    ro_base = episode(defender, defender, [i for i in prompt], horizon=5, return_sequence=True)
 
     print("==== POLICY ====")
-    print(ro_policy[-1].query+ro_policy[-1].response)
+    print("".join("["+i+"] " for i in ro_policy))
     print("==== BASE ====")
-    print(ro_base[-1].query+ro_base[-1].response)
+    print("".join("["+i+"] " for i in ro_base))
 
     breakpoint()
 
