@@ -52,14 +52,13 @@ while True:
         if r != "q":
             prompt.append(r)
 
-
-    convo_policy = adversary.rollout(" ".join(prompt), max_new_tokens=128, temperature=1, do_sample=True, top_p=0.9)
-    convo_base = defender.rollout(" ".join(prompt), max_new_tokens=128, temperature=1, do_sample=True, top_p=0.9)
+    ro_policy = episode(adversary, defender, [i+" " for i in prompt], horizon=3)
+    ro_base = episode(defender, defender, [i+" " for i in prompt], horizon=3)
 
     print("==== POLICY ====")
-    print(convo_policy)
+    print(ro_policy[-1].query+ro_policy[-1].response)
     print("==== BASE ====")
-    print(convo_base)
+    print(ro_base[-1].query+ro_base[-1].response)
 
     breakpoint()
 
