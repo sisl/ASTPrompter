@@ -14,6 +14,13 @@ from dataclasses import dataclass
 from lm import LanguageModel
 from typing import List
 
+
+@dataclass
+class RewardComponent:
+    ast_tox: float
+    combined_tox: float
+    ast_ppl: float
+
 @dataclass
 class ASTStep:
     query: str
@@ -21,13 +28,14 @@ class ASTStep:
     response_l: str
     reward_w: float
     reward_l: float
+    reward_component: RewardComponent
 
 # adversary = LanguageModel()
 # defender = LanguageModel()
 # prompt = [
-#     "I am bob",
-#     "bob, you are such a hilarious person",
-#     "u are such a silly"
+#     "I am bob ",
+#     "bob, you are such a hilarious person ",
+#     "u are such a silly "
 # ]
 
 def soft_sigmoid(x):
@@ -99,7 +107,7 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     
     # expand a tree out at each stage to get a step
     convo = copy.deepcopy(list(prompt))
-    current_prompt = " ".join(convo)
+    current_prompt = "".join(convo)
 
     # get an utterance + response pair from the LM
     if kwargs.get("force_ast"):
@@ -164,7 +172,7 @@ def teach_paired(adversary: LanguageModel, defender: LanguageModel,
         reward_l = ro1_score
 
     # seralize a single step
-    step = ASTStep(prompt, win[0], lost[0], reward_w, reward_l)
+    step = ASTStep(prompt, win[0], lost[0], reward_w, reward_l, None)
 
     return step
 
@@ -214,7 +222,7 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
         reward_l = ro1_score
 
     # seralize a single step
-    step = ASTStep(" ".join(prompt), win[0], lost[0], reward_w, reward_l)
+    step = ASTStep("".join(prompt), win[0], lost[0], reward_w, reward_l, None)
     steps.append(step)
 
     # we will expand each of these steps down into a tree
@@ -229,6 +237,7 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
     return steps
 
 # steps = episode_paired(adversary, defender, prompt)
+# steps[0]
 # len(adversary.tokenizer(steps[-1].query + steps[-1].response_w)["input_ids"])
 # steps
 
@@ -253,51 +262,26 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
         Steps, Rewards.
     """
 
-    
-    convo = list(copy.deepcopy(prompt_src))
-    states = []
-    # if we are forcing ast, we use a wholly different procedure whereby
-    # we wouldn't sample rollouts from the continuation and instea
-    # jsut force an output
-    # seralize into "userN" series
-    for i in range(horizon):
-        prompt = " ".join(convo).strip()
+    steps = []
 
-        # to prevent overly long utterances
-        while len(prompt) > 1500 and len(convo) > 1:
-            convo = convo[1:]
-            prompt = " ".join(convo).strip()
-        
-        with torch.inference_mode():
-            # we use random_rollout to ignore some generation kwargs
-            # in particular min length and top p, to fix problems
-            # outlined here:
-            # https://discuss.huggingface.co/t/negative-kl-divergence-rlhf-implementation/53275
-            ut = adversary.rollout(prompt, max_new_tokens=24, repetition_penalty=1.1, temperature=0.7, skip_special_tokens=True, **kwargs)
-            new_utterance_ast = ut.replace(prompt, "").strip()
+    if horizon == 0:
+        return steps
 
-            convo.append(new_utterance_ast.strip())
+    # rollouts, scoring each to figure out who won
+    ro = __handle_prompt(defender, adversary, prompt_src, **kwargs)
+    ro_score = reward(*ro)
+    prompt = copy.deepcopy(prompt_src)+[ro[0], ro[1]]
+    # we will use ASTStep as a holder for results, but just don't provide
+    # a "loosing" response
+    steps.append(ASTStep("".join(prompt_src), ro[0], None, ro_score, None,
+                         RewardComponent(ro[2], ro[3], ro[4])))
+    steps += episode(adversary, defender, prompt, horizon-1, **kwargs)
 
-            ast_ppl = defender.perplexity(new_utterance_ast, prompt, device=kwargs.get("device")).detach().item()
+    return steps
 
-            prompt = " ".join(convo).strip()
-            ut = defender.rollout(prompt, max_new_tokens=24, repetition_penalty=1.1, temperature=0.7, skip_special_tokens=True, **kwargs)
-            new_utterance_def = ut.replace(prompt, "").strip()
-
-            convo.append(new_utterance_def.strip())
-
-            combined_tox = call_detoxify(new_utterance_ast + new_utterance_def)["toxicity"] # we want this to be high for AST
-            ast_tox = call_detoxify(new_utterance_ast)["toxicity"] # we want this to be low 
-
-            # print(len(convo), convo[-1])
-        
-        # step = ASTStep(convo[-3].strip(), new_utterance_ast, ast_ppl,
-                        # new_utterance_def, ast_tox, combined_tox,
-                        # (" ".join(convo[:-2])).strip(),
-                        # convo[-2].strip())
-        # states.append(step)
-
-    return convo
+# a = episode(adversary, defender, prompt, horizon=3)
+# a
+# call_detoxify(tox)
 
 def teach(adversary: LanguageModel, defender: LanguageModel,
           prompt: str, response: str, **kwargs):
