@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     # establish the arguments of this system
     parser = argparse.ArgumentParser(description='AST Evaluator')
-    parser.add_argument('weights', type=str, help='which model shall we evaluate?', required=True)
+    parser.add_argument('weights', type=str, help='which model shall we evaluate?')
     parser.add_argument('--defense', type=str, help='what weights should we use for defense?',
                         default="openai-community/gpt2")
     parser.add_argument('--horizon', type=int, help='how many turns to self-play?',
@@ -70,14 +70,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # initialize accelerator once before??
     evaluator = Evaluator(args)
     dl = evaluator.load(prompts)
-    evaluator()
+    evaluator(dl)
 
 
-    # for each prompt, play and collect data
-
-
-
-    

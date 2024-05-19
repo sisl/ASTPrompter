@@ -55,11 +55,16 @@ class Evaluator:
 
         self.args = args
 
-        save_name = f"eval_{args.weights.split('/')[-1]}"
+        if args.weights[-1] == "/":
+            wn = args.weights[:-1]
+        else:
+            wn = args.weights
+
+        save_name = f"eval_{wn.split('/')[-1]}"
         if args.save_name:
             save_name = args.save_name
         self.save_dir = os.path.join(args.save_dir, save_name)
-        os.makedirs(self.save_dir, exists_ok=True)
+        os.makedirs(self.save_dir, exist_ok=True)
         self.args = args
         self.__results_cache = []
 
@@ -86,10 +91,10 @@ class Evaluator:
             def __len__(self):
                 return len(self.__data)
 
-        ds = TrainerDataset(steps)
+        ds = TrainerDataset(data)
         # batch_size = 1 because we will blow each batch
         # up to an entire dialogue
-        dl = DataLoader(ds, 1) 
+        dl = DataLoader(ds, 1, collate_fn=lambda x:x) 
 
         # huggingface accelerate may ship the dataset
         # off to different processes, etc.
@@ -105,32 +110,32 @@ class Evaluator:
     def report(self):
         rewards = [i.reward_w for i in self.__results_cache]
         ast_toxes = [i.reward_component.ast_tox for i in self.__results_cache]
-        combined_toxes = [i.reward_component.combined_toxes for i in self.__results_cache]
-        ast_ppls = [i.reward_component.ast_ppls for i in self.__results_cache]
+        combined_toxes = [i.reward_component.combined_tox for i in self.__results_cache]
+        ast_ppls = [i.reward_component.ast_ppl for i in self.__results_cache]
 
         result = {
             "rewards": {
-                "max": max(rewards),
-                "min": min(rewards),
-                "mean": sum(rewards)/len(rewards),
+                "max": str(round(max(rewards), 3)),
+                "min": str(round(min(rewards), 3)),
+                "mean": str(round(sum(rewards)/len(rewards), 3)),
             },
             "tox": {
                 "ast": {
-                    "max": max(ast_toxes),
-                    "min": min(ast_toxes),
-                    "mean": sum(ast_toxes)/len(ast_toxes),
+                    "max": str(round(max(ast_toxes), 3)),
+                    "min": str(round(min(ast_toxes), 3)),
+                    "mean": str(round(sum(ast_toxes)/len(ast_toxes), 3)),
                 },
                 "combined": {
-                    "max": max(combined_toxes),
-                    "min": min(combined_toxes),
-                    "mean": sum(combined_toxes)/len(combined_toxes),
+                    "max": str(round(max(combined_toxes), 3)),
+                    "min": str(round(min(combined_toxes), 3)),
+                    "mean": str(round(sum(combined_toxes)/len(combined_toxes), 3)),
                 }
             },
             "ppl": {
                 "ast": {
-                    "max": max(ast_ppls),
-                    "min": min(ast_ppls),
-                    "mean": sum(ast_ppls)/len(ast_ppls),
+                    "max": str(round(max(ast_ppls), 3)),
+                    "min": str(round(min(ast_ppls), 3)),
+                    "mean": str(round(sum(ast_ppls)/len(ast_ppls), 3)),
                 }
             },
             "meta": {
