@@ -1,15 +1,15 @@
-from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead, DPOConfig, DPOTrainer
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
 from accelerate.utils.tqdm import tqdm
-from transformers import AutoTokenizer
-from torch.optim.lr_scheduler import ExponentialLR
-from torch.optim import Adam
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from torch.optim.lr_scheduler import LambdaLR
+from torch.optim import AdamW
 from lm import *
 from peft import LoraConfig
 from environment import *
 import torch
+from torch.nn.utils import clip_grad_norm_
 import os
 import wandb
 
@@ -23,9 +23,18 @@ class Trainer:
                  defense="openai-community/gpt2",
                  **kwargs):
 
-        horizon = args.horizon
+        # cache horizon
+        self.horizon = args.horizon
 
-        self.batch_size = args.batch_size
+        # initialize early the accelator
+        self.accelerator = Accelerator(**kwargs.get("accelerator_kwargs", {}),
+                                       log_with="wandb" if args.wandb else None)
+        if args.wandb:
+            self.accelerator.init_trackers(
+                project_name="ast", 
+                config=vars(args),
+                init_kwargs=kwargs.get("wandb_kwargs", {})
+            )
 
         # because the PPO wrapper chops the end off and add
         # a value head, we can't just naively initalize a GPT-2
@@ -34,10 +43,10 @@ class Trainer:
 
         self.adversary = LanguageModel(dont_init=True)
         if args.warm_start:
-            adversary_model = AutoModelForCausalLMWithValueHead.from_pretrained(args.warm_start)
+            adversary_model = AutoModelForCausalLM.from_pretrained(args.warm_start)
         else:
-            adversary_model = AutoModelForCausalLMWithValueHead.from_pretrained(config.model_name)
-        self.adversary.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+            adversary_model = AutoModelForCausalLM.from_pretrained(model)
+        self.adversary.tokenizer = AutoTokenizer.from_pretrained(model)
 
         # our defender can be initialized normally 
         # and immeditaley frozen
@@ -50,49 +59,23 @@ class Trainer:
         self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
         self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
-        config = DPOConfig(
-            #  See here: https://github.com/huggingface/trl/issues/1294
-            beta = 0.5, # For the IPO loss, beta is the regularization parameter denoted by tau in the paper.
-            label_smoothing = 0, # https://x.com/norabelrose/status/1728266549906325749
-            label_pad_token_id = self.defender.tokenizer.pad_token_id,
-            loss_type = "ipo",
-            truncation_mode = "keep_end", # Default, could not find source explaining when to use this vs keep_start
-            **kwargs
-        )
-
-        # Mithcell implementation uses RMSProp for efficiency but Adam should be fine
-        self.optimizer = Adam( 
-            filter(lambda p: p.requires_grad, adversary_model.parameters()),
-            lr=args.lr,
-            # https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
-            eps=1e-7
-        )
-        self.scheduler = ExponentialLR(self.optimizer, args.decay_factor)
-
-        self.dpo = DPOTrainer(
-            model = adversary_model,
-            model_ref = defense,
-            tokenizer = self.adversary.tokenizer,
-            config = config,
-            optimizer = self.optimizer,
-            lr_scheduler = self.scheduler
-        )
+        # all the mishmash to get
+        self.beta = args.beta
+        optimizer = AdamW(adversary_model.parameters(), lr=args.lr)
+        scheduler = LambdaLR(optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / (args.warmup_steps + 1)))
 
         # because the accelerator may move models to weird places, we 
         # account for that
-        self.adversary.model = self.ppo.model
-        self.defender.model = self.ppo.accelerator.prepare(self.defender.model)
+        (self.adversary.model, self.defender.model,
+                self.optimizer, self.scheduler) = self.accelerator.prepare(adversary_model, self.defender.model,
+                        optimizer, scheduler)
 
-        self.horizon = horizon
-
-        save_name = f"ppo_model_{model.split('/')[-1]}"
+        save_name = f"dpo_model_{model.split('/')[-1]}"
         if args.save_name:
             save_name = args.save_name
         self.save_dir = os.path.join(args.save_dir, save_name)
-
-    @property
-    def accelerator(self):
-        return self.ppo.accelerator
+        self.args = args
+        self.global_step_counter_ = 0
 
     def save(self, postfix=""):
         """save the model, optionally with a postfix
@@ -104,19 +87,16 @@ class Trainer:
             will make it this/here_postfix)
         """
 
-        self.ppo.save_pretrained((self.save_dir+("_"+postfix
-                                                 if postfix != ""
-                                                 else "").strip()))
+        self.adversary.model.save_pretrained((self.save_dir+("_"+postfix if postfix != "" else "").strip()))
+        self.adversary.tokenizer.save_pretrained((self.save_dir+("_"+postfix if postfix != "" else "").strip()))
     
-    def prepare(self, steps, rewards, batch=1):
+    def prepare(self, steps, batch=1):
         """Make a distributed dataset from stings for training.
 
         Parameters
         ----------
         steps : List[ASTStep]
             Prompt strings.
-        rewards : List[float]
-            The rewards which the steps got.
 
         Returns
         -------
@@ -125,18 +105,16 @@ class Trainer:
         """
 
         class TrainerDataset(Dataset):
-            def __init__(self, data, reward):
+            def __init__(self, data):
                 super().__init__()
                 self.__data = data
-                self.__reward = reward
-                assert len(self.__data) == len(self.__reward), "lengths fo reward and data are not the same lengths!"
             def __getitem__(self, x):
-                return (self.__data[x].query, self.__data[x].response, self.__reward[x], 
-                        self.__data[x].prompt_utt, self.__data[x].ast_utt, self.__data[x].def_utt)
+                return (self.__data[x].query+self.__data[x].response_w,
+                        self.__data[x].query+self.__data[x].response_l)
             def __len__(self):
                 return len(self.__data)
 
-        ds = TrainerDataset(steps, rewards)
+        ds = TrainerDataset(steps)
         # batch_size = 1 because we will blow each batch
         # up to an entire dialogue
         dl = DataLoader(ds, batch) 
@@ -144,6 +122,20 @@ class Trainer:
         # huggingface accelerate may ship the dataset
         # off to different processes, etc.
         return self.accelerator.prepare(dl)
+
+    def play(self, prompt):
+        return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], self.horizon)
+
+    def teach(self, prompt):
+        return teach_paired(self.adversary, self.defender, prompt)
+
+    def rollout(self, prompt, **kwargs):
+        current_prompt = prompt
+        def_ut = self.adversary.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,
+                                        temperature=0.7, skip_special_tokens=True, **kwargs)
+        def_ut = def_ut.replace(current_prompt, "")
+
+        return def_ut
 
     def epoch(self, dataloader, log_every=10):
         """Run an epoch of the data.
@@ -156,49 +148,42 @@ class Trainer:
             how often to log to wandb
         """
         
-        # this should be a batch of one, so we index
-        # to get rid of the outer shell
         for i, batch in enumerate(tqdm(iter(dataloader), total=len(dataloader))):
-            self.step(batch, log=(i % log_every == 0))
+            loss, metrics = self.step(batch, log=(i % log_every == 0))
+            self.accelerator.backward(loss / self.args.accumulate_steps)
 
-    def play(self, prompt):
-        """self play to run the prompt
+            if (i % self.args.accumulate_steps) == 0:
+                gn = clip_grad_norm_(self.adversary.model.parameters(), self.args.max_gradient_norm).cpu().item()
+                metrics["training/gradient_norm"] = gn
+                self.optimizer.step()
+                self.scheduler.step()
+                self.optimizer.zero_grad()
 
-        Parameters
-        ----------
-        prompt : List[str]
-            the prompt to evaluate on
+            if (i % log_every == 0):
+                metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
+                self.accelerator.log(metrics, step=self.global_step_counter_)
 
-        Returns
-        -------
-        List[ASTStep], List[float], List[str]
-            Steps, rewards per step, conversation.
-        """
-        
-        # run the prompt
-        eps, rewards, convo = episode(self.adversary, self.defender, prompt,
-                                      horizon=self.horizon, device=self.accelerator.device)
+            self.global_step_counter_ += 1
 
-        return eps, rewards, convo
+    def finish(self):
+        self.accelerator.end_training()
 
-    def teach(self, prompt, response):
-        """self play to run the prompt
+    def __loss(self, policy_chosen_logps, policy_rejected_logps,
+                     reference_chosen_logps, reference_rejected_logps):
+        # https://github.com/eric-mitchell/direct-preference-optimization/blob/ \
+        # f8b8c0f49dc92a430bae41585f9d467d3618fe2f/trainers.py#L70-L87
+        pi_logratios = policy_chosen_logps - policy_rejected_logps
+        ref_logratios = reference_chosen_logps - reference_rejected_logps
+        logits = pi_logratios - ref_logratios  # also known as h_{\pi_\theta}^{y_w,y_l}
 
-        Parameters
-        ----------
-        prompt : str
-            the prompt to elicit
-        response : str
-            what the the AST should respond
 
-        Returns
-        -------
-        ASTStep, float
-            Step, reward.
-        """
-        
-        return teach(self.adversary, self.defender,
-                     prompt, response, device=self.accelerator.device)
+        # this is IPO, Eq. 17 of https://arxiv.org/pdf/2310.12036v2.pdf
+        losses = (logits - 1/(2 * self.beta)) ** 2
+
+        chosen_rewards = self.beta * (policy_chosen_logps - reference_chosen_logps).detach()
+        rejected_rewards = self.beta * (policy_rejected_logps - reference_rejected_logps).detach()
+
+        return losses, chosen_rewards, rejected_rewards
 
     def step(self, batch, log=False):
         """Optimize our model by a single step.
@@ -211,45 +196,80 @@ class Trainer:
             whether to log
         """
 
-        qs, rs, rewards_list, p_ut, a_ut, def_ut = batch
-        rewards = torch.tensor(rewards_list).float()
+        combined_wins, combined_loses = batch
 
-#         if any(rewards > 2):
-            # breakpoint()
+        # we need to individualy calculate the logprobs of wins and loses
+        # for both our adversarial model + defender model
+        with torch.inference_mode():
+            defender_logprobs_win = self.defender.logprob_batched(combined_wins, self.accelerator.device)
+            defender_logprobs_loss = self.defender.logprob_batched(combined_loses, self.accelerator.device)
+        adversary_logprobs_win = self.adversary.logprob_batched(combined_wins, self.accelerator.device) 
+        adversary_logprobs_loss = self.adversary.logprob_batched(combined_loses, self.accelerator.device) 
 
-        # get input IDs for queries and responses, padded
-        query_ids = self.adversary.tokenizer(qs)["input_ids"]
-        response_ids = self.adversary.tokenizer(rs)["input_ids"]
+        # yipee
+        loses, chosen_rewards, rejected_rewards = self.__loss(adversary_logprobs_win,
+                                                              adversary_logprobs_loss,
+                                                              defender_logprobs_win,
+                                                              defender_logprobs_loss)
+        reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
-        # trl isn't happy if we have a batch size that don't match
-        if len(query_ids) != self.batch_size:
-            breakpoint()
-            return
+        metrics = {
+            "rewards/chosen": chosen_rewards.mean().cpu().item(),
+            "rewards/rejected": rejected_rewards.mean().cpu().item(),
+            "rewards/reward_accuracy": reward_accuracies.mean().cpu().item(),
+            "rewards/reward_margin": (chosen_rewards - rejected_rewards).mean().cpu().item(),
+            "policy/logprobs_chosen": adversary_logprobs_win.mean().detach().cpu().item(),
+            "policy/logprobs_rejected": adversary_logprobs_loss.mean().detach().cpu().item(),
+            "ref/logprobs_chosen": defender_logprobs_win.mean().detach().cpu().item(),
+            "ref/logprobs_rejected": defender_logprobs_loss.mean().detach().cpu().item(),
+            "training/loss": loses.mean().detach().cpu().item(),
+            "debug/text": wandb.Table(data=list(zip(combined_wins, combined_loses)), 
+                columns=["chosen", "rejected"])
+        }
+
+        return loses.mean(), metrics
+
+#         combined_wins, combined_loses
+
+
+#         rewards = torch.tensor(rewards_list).float()
+
+# #         if any(rewards > 2):
+#             # breakpoint()
+
+#         # get input IDs for queries and responses, padded
+#         query_ids = self.adversary.tokenizer(qs)["input_ids"]
+#         response_ids = self.adversary.tokenizer(rs)["input_ids"]
+
+#         # trl isn't happy if we have a batch size that don't match
+#         if len(query_ids) != self.batch_size:
+#             breakpoint()
+#             return
     
-        # if the AST said nothing, don't run anything 
-        if 0 in [len(i) for i in response_ids]:
-            breakpoint()
-            return
+#         # if the AST said nothing, don't run anything 
+#         if 0 in [len(i) for i in response_ids]:
+#             breakpoint()
+#             return
 
-        # Run PPO step
-        # try:
-        # we want a list, one for each batch elemnet for the batch
-        # also, we crop the input in case they are too long to fix the context
-        # we proirtize keeping the end of the input and the beginning of
-        # the output
-        stats = self.ppo.step([torch.tensor(i)[-959:] for i in query_ids],
-                              [torch.tensor(i)[:64] for i in response_ids],
-                              list(rewards.unbind(0)))
-        # except RuntimeError as e:
-            # return
+#         # Run PPO step
+#         # try:
+#         # we want a list, one for each batch elemnet for the batch
+#         # also, we crop the input in case they are too long to fix the context
+#         # we proirtize keeping the end of the input and the beginning of
+#         # the output
+#         stats = self.ppo.step([torch.tensor(i)[-959:] for i in query_ids],
+#                               [torch.tensor(i)[:64] for i in response_ids],
+#                               list(rewards.unbind(0)))
+#         # except RuntimeError as e:
+#             # return
 
-        # we need to send rewards to cuda because ddp needs them on the
-        # same device for logging
-        if log:
-            self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
-                            rewards.to(self.accelerator.device))
-            table = wandb.Table(columns=["prompt", "ast", "defense", "reward"],
-                                rows=[[i, j, k, r] 
-                                    for i,j,k,r in zip(p_ut, a_ut, def_ut, rewards_list)])
-            self.accelerator.log({"debug/pairings": table})
+#         # we need to send rewards to cuda because ddp needs them on the
+#         # same device for logging
+#         if log:
+#             self.ppo.log_stats(stats, {"query": qs, "response": rs}, 
+#                             rewards.to(self.accelerator.device))
+#             table = wandb.Table(columns=["prompt", "ast", "defense", "reward"],
+#                                 rows=[[i, j, k, r] 
+#                                     for i,j,k,r in zip(p_ut, a_ut, def_ut, rewards_list)])
+#             self.accelerator.log({"debug/pairings": table})
 

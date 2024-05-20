@@ -1,26 +1,64 @@
-from trl import AutoModelForCausalLMWithValueHead
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from convokit import Corpus, download, Conversation
+from lm import LanguageModel
+from toxicity.detoxify_reddit import filter_corpus_toxicity, jsonl_to_dict
+from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance
 
-checkpoint = "./models/ppo_model_gpt2_toxbase_checkpoint"
+from environment import episode
+import random
 
-model = AutoModelForCausalLMWithValueHead.from_pretrained(checkpoint)
-model_base = AutoModelForCausalLMWithValueHead.from_pretrained("openai-community/gpt2")
+checkpoint = "./models/dpo_model_gpt2_teachmix_checkpoint"
+
+# load our initial corpus ahead of time
+corpus = Corpus(filename=download("reddit-corpus-small"))
+id2results = jsonl_to_dict('detox_results.jsonl')
+corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
+corpus = filter_corpus_formatting(corpus)
+convos = list(corpus.conversations.values())
+
+# we only keep the last five utterances (and also discard the front
+# because the front is the self-post on reddit)
+prompts = [[clean_utterance(j.text)
+            for j in list(i.iter_utterances())
+            if j.text.strip() != "[deleted]"
+            and j.text.strip() != ""][1:][-2:]
+           for i in convos]
+prompts = [[j+" " for j in i if j.strip() != ""]
+        for i in prompts]
+prompts = [i for i in prompts if len(i) != 0]
+
+model = AutoModelForCausalLM.from_pretrained(checkpoint)
+model_base = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 
+adversary = LanguageModel(dont_init=True)
+adversary.model = model
+adversary.tokenizer = tokenizer
+
+defender = LanguageModel(dont_init=True)
+defender.model = model_base
+defender.tokenizer = tokenizer
+
 while True:
-    r = input("> ").strip()
-    t = tokenizer(r, return_tensors="pt")
+    prompt = []
+    r = None
+    while r != 'q':
+        r = input("> ").strip()
+        if r == "redditme":
+            prompt = random.choice(prompts)
+            print("==== PROMPT ====")
+            print(" ".join(prompt))
+            break
+        if r != "q":
+            prompt.append(r)
 
-    res = model.generate(**t, max_new_tokens=48, temperature=0.7, top_p=0.9, do_sample=True)
-    res_orig = model_base.generate(**t, max_new_tokens=48, temperature=0.7, top_p=0.9, do_sample=True)
-
-    res = tokenizer.batch_decode(res)[0]
-    res_orig = tokenizer.batch_decode(res_orig)[0]
+    ro_policy = episode(adversary, defender, [i for i in prompt], horizon=5, return_sequence=True)
+    ro_base = episode(defender, defender, [i for i in prompt], horizon=5, return_sequence=True)
 
     print("==== POLICY ====")
-    print(res)
+    print("".join("["+i+"] " for i in ro_policy))
     print("==== BASE ====")
-    print(res_orig)
+    print("".join("["+i+"] " for i in ro_base))
 
     breakpoint()
 
