@@ -126,8 +126,8 @@ class Trainer:
     def play(self, prompt):
         return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], self.horizon)
 
-    def teach(self, prompt, response):
-        return teach_paired(self.adversary, self.defender, prompt, response)
+    def teach(self, prompt):
+        return teach_paired(self.adversary, self.defender, prompt)
 
     def rollout(self, prompt, **kwargs):
         current_prompt = prompt

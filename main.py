@@ -134,7 +134,7 @@ if __name__ == "__main__":
                 while len(steps) < args.experience_size:
                     # check if we want to insert a teaching statement
                     if R.random() < args.tox_mix:
-                        steps.append(trainer.teach(*R.choice(prompts_rtp)))
+                        steps.append(trainer.teach(R.choice(prompts_rtp)[0]))
                         bar.update(1)
                     else:
                         try:

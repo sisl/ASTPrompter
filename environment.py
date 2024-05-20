@@ -136,7 +136,8 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     return (ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox)
 
 def teach_paired(adversary: LanguageModel, defender: LanguageModel,
-                 prompt: str, response: str, **kwargs):
+                 prompt: str, **kwargs):
+# , response: str
     """Supervisorily the LM to say somethnig
 
     Parameters
@@ -155,6 +156,14 @@ def teach_paired(adversary: LanguageModel, defender: LanguageModel,
     ASTStep
         The teaching step.
     """
+
+    # randomly split the prompt somewhere
+    splitted = prompt.split(" ")
+    # chop up half the prompt
+    half = len(splitted) // 2
+    # toxicity and prompt
+    response = " ".join(splitted[half:])+" "
+    prompt = " ".join(splitted[:half]).strip()+" "
     
     ro1 = __handle_prompt(defender, adversary, [prompt], force_ast=response, **kwargs)
     ro2 = __handle_prompt(defender, adversary, [prompt], **kwargs)
