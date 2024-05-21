@@ -167,7 +167,7 @@ if __name__ == "__main__":
                         except RuntimeError:
                             continue
         # 
-        breakpoint()
+        # breakpoint()
 
         # on *EACH THREAD*, prepare our dataset
         dataset = trainer.prepare(steps, batch=args.batch_size)
