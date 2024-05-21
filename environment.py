@@ -31,11 +31,11 @@ class ASTStep:
     reward_l: float
     reward_component: RewardComponent
 
-adversary = LanguageModel()
-defender = LanguageModel()
+# adversary = LanguageModel()
+# defender = LanguageModel()
 
-r = teach_paired(adversary, defender, "You can have beautiful reflections, you can have ugly reflections but the mirror itself does")
-# r
+# r = teach_paired(adversary, defender, "You can have beautiful reflections, you can have ugly reflections but the mirror itself does")
+# # r
 
 # prompt = [
 #     "I am bob ",
