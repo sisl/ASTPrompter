@@ -31,8 +31,12 @@ class ASTStep:
     reward_l: float
     reward_component: RewardComponent
 
-# adversary = LanguageModel()
-# defender = LanguageModel()
+adversary = LanguageModel()
+defender = LanguageModel()
+
+r = teach_paired(adversary, defender, "You can have beautiful reflections, you can have ugly reflections but the mirror itself does")
+# r
+
 # prompt = [
 #     "I am bob ",
 #     "bob, you are such a hilarious person ",
@@ -171,17 +175,11 @@ def teach_paired(adversary: LanguageModel, defender: LanguageModel,
     ro1_score = reward(*ro1)
     ro2_score = reward(*ro2)
 
-    # DPO/IPO expects *paired* responses
-    if ro1_score >= ro2_score:
-        win = ro1
-        lost = ro2
-        reward_w = ro1_score
-        reward_l = ro2_score
-    else:
-        win = ro2
-        lost = ro1
-        reward_w = ro2_score
-        reward_l = ro1_score
+    # because we are forcing, we always assign ro1 to be the win
+    win = ro1
+    lost = ro2
+    reward_w = ro1_score
+    reward_l = ro2_score
 
     # seralize a single step
     step = ASTStep(prompt, win[0], lost[0], reward_w, reward_l, None)
