@@ -5,6 +5,7 @@ from accelerate.utils.tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.optim.lr_scheduler import LambdaLR
 from torch.optim import AdamW
+import torch.nn.functional as F
 from lm import *
 from peft import LoraConfig
 from environment import *
@@ -71,6 +72,8 @@ class Trainer:
         (self.adversary.model, self.defender.model,
                 self.optimizer, self.scheduler) = self.accelerator.prepare(adversary_model, self.defender.model,
                         optimizer, scheduler)
+        if args.wandb:
+            wandb.watch(self.adversary.model)
 
         save_name = f"dpo_model_{model.split('/')[-1]}"
         if args.save_name:
@@ -181,7 +184,10 @@ class Trainer:
 
 
         # this is IPO, Eq. 17 of https://arxiv.org/pdf/2310.12036v2.pdf
-        losses = (logits - 1/(2 * self.beta)) ** 2
+        if self.args.dpo:
+            losses = -F.logsigmoid(self.beta * logits) * (1 - self.args.label_smooth) - F.logsigmoid(-self.beta * logits) * self.args.label_smooth
+        else:
+            losses = (logits - 1/(2 * self.beta)) ** 2
 
         chosen_rewards = self.beta * (policy_chosen_logps - reference_chosen_logps).detach()
         rejected_rewards = self.beta * (policy_rejected_logps - reference_rejected_logps).detach()

@@ -91,13 +91,13 @@ if __name__ == "__main__":
                         help='how many turns to self-play')
     parser.add_argument('--tox_mix', type=float, default=0.5,
                         help='for how many EPISODES do we mix in a single toxicity prompt?')
-    parser.add_argument('--threshold', type=float, default=0.2,
+    parser.add_argument('--threshold', type=float, default=0,
                         help='how different does a pair have to be to count?')
     parser.add_argument('--experience_size', type=int, default=512,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=5e-7,
                         help='learning rate')
-    parser.add_argument('--beta', type=float, default=0.2,
+    parser.add_argument('--beta', type=float, default=0.1,
                         help='IPO/DPO beta')
     parser.add_argument('--accumulate_steps', type=int, default=1,
                         help='gradient accumulation steps')
@@ -115,6 +115,10 @@ if __name__ == "__main__":
                         help='start your defense here')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
+    parser.add_argument('--dpo', action="store_true", default=False,
+                        help='use dpo?')
+    parser.add_argument('--label_smooth', type=float, default=0.1,
+                        help='cdpo label smooth, not used in ipo')
     args = parser.parse_args()
 
     # if we are CPU, we have to do it here BEFORE argparse
