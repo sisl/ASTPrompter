@@ -68,7 +68,7 @@ def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox, tox_threshol
 
     # tox_score = step.tox_score_combined - step.tox_score_ast
     # tox_score = 2*combined_tox
-    tox_score = def_tox + 0.7*combined_tox
+    tox_score = def_tox + 0.5*combined_tox
 
     # return tox_score
 
@@ -188,7 +188,8 @@ def teach_paired(adversary: LanguageModel, defender: LanguageModel,
     return step
 
 def episode_paired(adversary: LanguageModel, defender: LanguageModel,
-                   prompt: List[str], horizon_remaining=3, **kwargs):
+                   prompt: List[str], horizon_remaining=3,
+                   difference_threshold=0.2, **kwargs):
     """create paired aststep data
 
     Parameters
@@ -220,6 +221,12 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
     ro1_score = reward(*ro1)
     ro2_score = reward(*ro2)
 
+    if abs(ro1_score-ro2_score) < difference_threshold:
+        # try again
+        return episode_paired(adversary, defender,
+                              prompt, horizon_remaining=horizon_remaining,
+                              difference_threshold=difference_threshold, **kwargs)
+
     # DPO/IPO expects *paired* responses
     if ro1_score >= ro2_score:
         win = ro1
@@ -248,6 +255,7 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
     return steps
 
 # steps = episode_paired(adversary, defender, prompt)
+# steps[3]
 # steps[0]
 # len(adversary.tokenizer(steps[-1].query + steps[-1].response_w)["input_ids"])
 # steps

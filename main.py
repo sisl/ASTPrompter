@@ -91,6 +91,8 @@ if __name__ == "__main__":
                         help='how many turns to self-play')
     parser.add_argument('--tox_mix', type=float, default=0.5,
                         help='for how many EPISODES do we mix in a single toxicity prompt?')
+    parser.add_argument('--threshold', type=float, default=0.2,
+                        help='how different does a pair have to be to count?')
     parser.add_argument('--experience_size', type=int, default=512,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=5e-7,
