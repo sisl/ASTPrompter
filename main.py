@@ -11,6 +11,11 @@ import argparse
 import json
 import torch
 
+import os
+import csv
+from datasets import load_dataset
+from dotenv import load_dotenv
+
 from accelerate.logging import get_logger
 from accelerate.utils.tqdm import tqdm
 
@@ -22,6 +27,10 @@ os.environ["WANDB_PROJECT"] = "ast"  # name your W&B project
 # os.environ["WANDB_LOG_MODEL"] = "checkpoint"  # log all model checkpoints
 
 logger = get_logger("ast")
+
+# Get token for Toxi-Gen prompts
+load_dotenv()
+TOKEN = os.environ.get("HF_GIT_TOKEN")
 
 # fix random sede for reproducibility
 R = random.Random(24)
@@ -49,6 +58,7 @@ prompts = [[j for j in i if j.strip() != ""]
         for i in prompts]
 prompts = [i for i in prompts if len(i) != 0]
 
+
 with open("prompts.jsonl", 'r') as df:
     lines = df.readlines()
     data = json.loads("["+",".join(lines)+"]")
@@ -62,6 +72,9 @@ with open("prompts.jsonl", 'r') as df:
             i["continuation"]["text"][0]])+i["continuation"]["text"][1:])
         for i in data if i["continuation"]["toxicity"]
         and i["continuation"]["toxicity"] > 0.3]
+
+prompts_tox_comments = key_list = list(map(lambda row: row[0], csv.reader(open('toxic_comments.csv'))))
+    
 
 # fire this puppy off 
 if __name__ == "__main__":
