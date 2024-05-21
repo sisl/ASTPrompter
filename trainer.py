@@ -126,7 +126,8 @@ class Trainer:
         return self.accelerator.prepare(dl)
 
     def play(self, prompt):
-        return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], self.horizon, difference_threshold=self.args.threshold)
+        return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], 
+                self.horizon, difference_threshold=self.args.threshold)
 
     def teach(self, prompt):
         return teach_paired(self.adversary, self.defender, prompt)

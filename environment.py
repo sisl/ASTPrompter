@@ -249,8 +249,8 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
 
     # recursively traverse down the tree and rollout each of these
     # prompts until we hit an ending
-    steps += episode_paired(adversary, defender, prompt_win, horizon_remaining-1, **kwargs)
-    steps += episode_paired(adversary, defender, prompt_loose, horizon_remaining-1, **kwargs)
+    steps += episode_paired(adversary, defender, prompt_win, horizon_remaining-1, difference_threshold=difference_threshold, **kwargs)
+    steps += episode_paired(adversary, defender, prompt_loose, horizon_remaining-1, difference_threshold=difference_threshold, **kwargs)
 
     return steps
 
