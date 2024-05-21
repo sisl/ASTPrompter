@@ -5,6 +5,7 @@ from toxicity.detoxify_reddit import filter_corpus_toxicity, jsonl_to_dict
 from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance
 
 from environment import episode
+import torch
 import random
 
 checkpoint = "./models/dpo_model_gpt2_teachmix_checkpoint"
@@ -29,15 +30,23 @@ prompts = [i for i in prompts if len(i) != 0]
 
 model = AutoModelForCausalLM.from_pretrained(checkpoint)
 model_base = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+# model_defender = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="flash_attention_2", load_in_4bit=True, torch_dtype=torch.float16)
+model_defender = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+tokenizer_defender = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 adversary = LanguageModel(dont_init=True)
 adversary.model = model
 adversary.tokenizer = tokenizer
 
+base = LanguageModel(dont_init=True)
+base.model = model_base
+base.tokenizer = tokenizer
+
 defender = LanguageModel(dont_init=True)
-defender.model = model_base
-defender.tokenizer = tokenizer
+defender.model = model_defender
+defender.tokenizer = tokenizer_defender
+
 
 while True:
     prompt = []
@@ -52,8 +61,8 @@ while True:
         if r != "q":
             prompt.append(r)
 
-    ro_policy = episode(adversary, defender, [i for i in prompt], horizon=5, return_sequence=True)
-    ro_base = episode(defender, defender, [i for i in prompt], horizon=5, return_sequence=True)
+    ro_policy = episode(adversary, defender, prompt, horizon=5, return_sequence=True)
+    ro_base = episode(base, defender, prompt, horizon=5, return_sequence=True)
 
     print("==== POLICY ====")
     print("".join("["+i+"] " for i in ro_policy))

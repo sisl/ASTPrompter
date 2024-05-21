@@ -43,14 +43,16 @@ class Trainer:
 
         self.adversary = LanguageModel(dont_init=True)
         if args.warm_start:
-            adversary_model = AutoModelForCausalLM.from_pretrained(args.warm_start)
+            adversary_model = AutoModelForCausalLM.from_pretrained(args.warm_start, 
+                                                                   **kwargs.get("model_load_params", {}))
+            self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.warm_start)
         else:
-            adversary_model = AutoModelForCausalLM.from_pretrained(model)
-        self.adversary.tokenizer = AutoTokenizer.from_pretrained(model)
+            adversary_model = AutoModelForCausalLM.from_pretrained(model, **kwargs.get("model_load_params", {}))
+            self.adversary.tokenizer = AutoTokenizer.from_pretrained(model)
 
         # our defender can be initialized normally 
         # and immeditaley frozen
-        self.defender = LanguageModel(defense)
+        self.defender = LanguageModel(defense if not args.defense else args.defense, model_load_params=kwargs.get("model_load_params", {}))
         self.defender.model.eval()
 
         # GPT 2 doesn't have a padding token, so we add it

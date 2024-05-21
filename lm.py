@@ -38,7 +38,7 @@ class LanguageModel(object):
         The prompt to infer with the LM.
     **kwargs: inference parameters.
     """
-    def __init__(self, model="openai-community/gpt2", dont_init=False):
+    def __init__(self, model="openai-community/gpt2", dont_init=False, model_load_params={}):
 
         # because huggingface accelerate / deepspeed may move the models
         # we lazily initialize where we actually are by looking it up (see
@@ -46,7 +46,7 @@ class LanguageModel(object):
         self.__device = None
 
         if not dont_init:
-            self.model = AutoModelForCausalLM.from_pretrained(model, torch_dtype=torch.float32)
+            self.model = AutoModelForCausalLM.from_pretrained(model, **model_load_params)
                                                         # attn_implementation="flash_attention_2",)
             self.tokenizer = AutoTokenizer.from_pretrained(model)
 
@@ -97,10 +97,13 @@ class LanguageModel(object):
                                                 stopping_criteria = [],
                                                 pad_token_id=self.tokenizer.eos_token_id)
         else:
-            generated_ids = underlying.generate(**model_inputs, **kwargs,
-                                                temperature=temperature, top_p=top_p,
-                                                do_sample=do_sample, max_new_tokens=max_new_tokens, 
-                                                pad_token_id=self.tokenizer.eos_token_id)
+            try:
+                generated_ids = underlying.generate(**model_inputs, **kwargs,
+                                                    temperature=temperature, top_p=top_p,
+                                                    do_sample=do_sample, max_new_tokens=max_new_tokens,
+                                                    pad_token_id=self.tokenizer.eos_token_id)
+            except ValueError:
+                breakpoint()
 
         return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=skip_special_tokens)[0]
 

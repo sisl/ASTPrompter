@@ -9,6 +9,7 @@ from trainer import Trainer
 import random
 import argparse
 import json
+import torch
 
 from accelerate.logging import get_logger
 from accelerate.utils.tqdm import tqdm
@@ -95,6 +96,8 @@ if __name__ == "__main__":
                         help='the folder place to save our model')
     parser.add_argument('--warm_start', type=str, default=None,
                         help='start your policy here')
+    parser.add_argument('--defense', type=str, default=None,
+                        help='start your defense here')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
     args = parser.parse_args()
@@ -114,7 +117,14 @@ if __name__ == "__main__":
                               # comment the line below out to log
                               "mode": None if args.wandb else "disabled"
                           }
+                      },
+                      model_load_params={
+                          # "load_in_8bit": True,
+                          # "attn_implementation": "flash_attention_2",
+                          # "torch_dtype": torch.float16
+                          # "gradient_checkpointing": True
                       })
+                      # ref="openai-community/gpt2")
 
     ##########
 
@@ -143,6 +153,8 @@ if __name__ == "__main__":
                             steps += step
                         except RuntimeError:
                             continue
+        # 
+        breakpoint()
 
         # on *EACH THREAD*, prepare our dataset
         dataset = trainer.prepare(steps, batch=args.batch_size)
