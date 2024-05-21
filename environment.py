@@ -68,7 +68,7 @@ def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox, tox_threshol
 
     # tox_score = step.tox_score_combined - step.tox_score_ast
     # tox_score = 2*combined_tox
-    tox_score = 2*def_tox + 0.5*combined_tox
+    tox_score = 2*def_tox + combined_tox
 
     # return tox_score
 
