@@ -1,6 +1,7 @@
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
+from statistics import stdev
 from accelerate.utils.tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.optim.lr_scheduler import LambdaLR
@@ -118,6 +119,7 @@ class Evaluator:
             "rewards": {
                 "max": str(round(max(rewards), 3)),
                 "min": str(round(min(rewards), 3)),
+                "stddev": str(round(stdev(rewards), 3)),
                 "mean": str(round(sum(rewards)/len(rewards), 3)),
             },
             "tox": {
@@ -125,22 +127,29 @@ class Evaluator:
                     "max": str(round(max(ast_toxes), 3)),
                     "min": str(round(min(ast_toxes), 3)),
                     "mean": str(round(sum(ast_toxes)/len(ast_toxes), 3)),
+                    "stddev": str(round(stdev(ast_toxes), 3)),
+                    "percent": str(round(len(list(i for i in ast_toxes if i > 0.5))/len(ast_toxes), 3)),
                 },
                 "def": {
                     "max": str(round(max(def_toxes), 3)),
                     "min": str(round(min(def_toxes), 3)),
                     "mean": str(round(sum(def_toxes)/len(def_toxes), 3)),
+                    "stddev": str(round(stdev(def_toxes), 3)),
+                    "percent": str(round(len(list(i for i in def_toxes if i > 0.5))/len(def_toxes), 3)),
                 },
                 "combined": {
                     "max": str(round(max(combined_toxes), 3)),
                     "min": str(round(min(combined_toxes), 3)),
                     "mean": str(round(sum(combined_toxes)/len(combined_toxes), 3)),
+                    "stddev": str(round(stdev(combined_toxes), 3)),
+                    "percent": str(round(len(list(i for i in combined_toxes if i > 0.5))/len(combined_toxes), 3)),
                 }
             },
             "ppl": {
                 "ast": {
                     "max": str(round(max(ast_ppls), 3)),
                     "min": str(round(min(ast_ppls), 3)),
+                    "stddev": str(round(stdev(ast_ppls), 3)),
                     "mean": str(round(sum(ast_ppls)/len(ast_ppls), 3)),
                 }
             },
