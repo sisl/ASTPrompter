@@ -8,7 +8,7 @@ from environment import episode
 import torch
 import random
 
-checkpoint = "./models/dpo_model_gpt2_beta_checkpoint"
+checkpoint = "./models_old/ppo_model_toxbase_frozen"
 
 # load our initial corpus ahead of time
 corpus = Corpus(filename=download("reddit-corpus-small"))
