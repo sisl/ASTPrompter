@@ -3,3 +3,7 @@ google-api-python-client
 detoxify
 convokit
 bs4
+accelerate
+trl
+peft
+wandb
