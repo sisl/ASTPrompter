@@ -111,8 +111,10 @@ if __name__ == "__main__":
                         help='the folder place to save our model')
     parser.add_argument('--warm_start', type=str, default=None,
                         help='start your policy here')
-    parser.add_argument('--defense', type=str, default=None,
+    parser.add_argument('--defense', type=str, default='openai-community/gpt2xl',
                         help='start your defense here')
+    parser.add_argument('--baseline', type=str, default='openai-community/gpt2',
+                        help='use this as your baseline model')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
     parser.add_argument('--dpo', action="store_true", default=False,
