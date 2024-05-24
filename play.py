@@ -8,7 +8,11 @@ from environment import episode
 import torch
 import random
 
-checkpoint = "./models/dpo_model_gpt2_beta_checkpoint"
+checkpoint = "./models/gpt2xl_test_checkpoint"
+checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-6000"
+# checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-500"
+base = "openai-community/gpt2"
+defender = "openai-community/gpt2"
 
 # load our initial corpus ahead of time
 corpus = Corpus(filename=download("reddit-corpus-small"))
@@ -29,11 +33,11 @@ prompts = [[j+" " for j in i if j.strip() != ""]
 prompts = [i for i in prompts if len(i) != 0]
 
 model = AutoModelForCausalLM.from_pretrained(checkpoint)
-model_base = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+model_base = AutoModelForCausalLM.from_pretrained(base)
 # model_defender = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="flash_attention_2", load_in_4bit=True, torch_dtype=torch.float16)
-model_defender = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-tokenizer_defender = AutoTokenizer.from_pretrained("openai-community/gpt2")
+model_defender = AutoModelForCausalLM.from_pretrained(defender)
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+tokenizer_defender = AutoTokenizer.from_pretrained(defender)
 
 adversary = LanguageModel(dont_init=True)
 adversary.model = model

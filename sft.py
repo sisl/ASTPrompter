@@ -1,6 +1,8 @@
 import argparse
 from datasets import load_dataset, Dataset
-from trl import SFTConfig, SFTTrainer # Had to install trl from source to get this to run
+# from trl import SFTConfig, SFTTrainer # Had to install trl from source to get this to run
+from datasets import load_dataset
+# from trl import SFTConfig, SFTTrainer # Had to install trl from source to get this to run
 import json
 import random
 from accelerate import Accelerator
@@ -14,7 +16,7 @@ from torch.optim import AdamW
 import os
 import wandb
 
-os.environ["WANDB_PROJECT"] = "sft"
+os.environ["WANDB_PROJECT"] = "ast_sft"
 accelerator = Accelerator(project_dir="sft_out/", log_with="wandb")
 
 R = random.Random(24)
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set up tracking
-    accelerator.init_trackers(project_name="sft")
+    accelerator.init_trackers(project_name="ast_sft")
 
     # SFT model will be adversary
     adversary = LanguageModel(dont_init=True)
@@ -119,8 +121,8 @@ if __name__ == "__main__":
         learning_rate=5e-5,
         logging_first_step=True,
         report_to="wandb",
-        save_steps:2000,
-        load_best_model_at_end=True
+        save_steps=2000,
+        # load_best_model_at_end=True
     )
 
     trainer = Trainer(
