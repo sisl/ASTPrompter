@@ -55,12 +55,19 @@ class Trainer:
         # and immeditaley frozen
         self.defender = LanguageModel(defense if not args.defense else args.defense, model_load_params=kwargs.get("model_load_params", {}))
         self.defender.model.eval()
+        self.baseline = LanguageModel(args.baseline,
+                                      model_load_params=kwargs.get("model_load_params", {}))
+        self.defender.model.eval()
+        self.baseline.model.eval()
+
 
         # GPT 2 doesn't have a padding token, so we add it
         self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
         self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
+        self.baseline.tokenizer.pad_token = self.baseline.tokenizer.eos_token
         self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
         self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
+        self.baseline.tokenizer.pad_token_id = self.baseline.tokenizer.eos_token_id
 
         # all the mishmash to get
         self.beta = args.beta
@@ -70,8 +77,8 @@ class Trainer:
         # because the accelerator may move models to weird places, we 
         # account for that
         (self.adversary.model, self.defender.model,
-                self.optimizer, self.scheduler) = self.accelerator.prepare(adversary_model, self.defender.model,
-                        optimizer, scheduler)
+         self.baseline.model, self.optimizer, self.scheduler) = self.accelerator.prepare(adversary_model, self.defender.model,
+                                                                                         self.baseline.model, optimizer, scheduler)
         if args.wandb:
             wandb.watch(self.adversary.model)
 
@@ -210,8 +217,8 @@ class Trainer:
         # we need to individualy calculate the logprobs of wins and loses
         # for both our adversarial model + defender model
         with torch.inference_mode():
-            defender_logprobs_win = self.defender.logprob_batched(combined_wins, self.accelerator.device)
-            defender_logprobs_loss = self.defender.logprob_batched(combined_loses, self.accelerator.device)
+            defender_logprobs_win = self.baseline.logprob_batched(combined_wins, self.accelerator.device)
+            defender_logprobs_loss = self.baseline.logprob_batched(combined_loses, self.accelerator.device)
         adversary_logprobs_win = self.adversary.logprob_batched(combined_wins, self.accelerator.device) 
         adversary_logprobs_loss = self.adversary.logprob_batched(combined_loses, self.accelerator.device) 
 
