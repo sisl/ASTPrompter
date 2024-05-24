@@ -118,7 +118,9 @@ if __name__ == "__main__":
         output_dir="sft_out/",
         learning_rate=5e-5,
         logging_first_step=True,
-        report_to="wandb"
+        report_to="wandb",
+        save_steps:2000,
+        load_best_model_at_end=True
     )
 
     trainer = Trainer(
