@@ -128,7 +128,7 @@ if __name__ == "__main__":
     trainer = Trainer(
         model=adversary.model,
         args=training_args,
-        train_dataset=tokenized_dataset["train"],
+        train_dataset=tokenized_dataset,
         data_collator=data_collator,
     )
     
