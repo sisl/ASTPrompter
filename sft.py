@@ -1,5 +1,5 @@
 import argparse
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from trl import SFTConfig, SFTTrainer # Had to install trl from source to get this to run
 import json
 import random
@@ -25,7 +25,7 @@ print(DEVICE)
 transformers.logging.set_verbosity_info()
 
 # Train on toxic comments
-dataset = load_dataset("csv", data_files={"train":"toxic_comments.csv"})
+# dataset = load_dataset("csv", data_files={"train":"toxic_comments.csv"})
 
 def formatting_prompts_func(example):
     formatted_texts = []
@@ -40,16 +40,23 @@ def preprocess_function(example, tokenizer):
     #x = tokenizer(example["text"])
     return {"input_ids": x}
 
-# Eval on RTP (for now)
+def preprocess_rtp(example, tokenizer):
+    x = tokenizer.encode(example["prompt"], add_special_tokens=True, max_length=1024, truncation=True)
+    return {"input_ids": x}
+
+# Train on RTP
 with open("prompts.jsonl", 'r') as df:
     lines = df.readlines()
     data = json.loads("["+",".join(lines)+"]")
-    prompts_rtp = [(R.choice([i["prompt"]["text"][0].lower(),
+    prompts_rtp = [{"prompt": R.choice([i["prompt"]["text"][0].lower(),
         i["prompt"]["text"][0]])+i["prompt"]["text"][1:], 
-        R.choice([i["continuation"]["text"][0].lower(),
-            i["continuation"]["text"][0]])+i["continuation"]["text"][1:])
+        "continuation": R.choice([i["continuation"]["text"][0].lower(),
+            i["continuation"]["text"][0]])+i["continuation"]["text"][1:]}
         for i in data if i["continuation"]["toxicity"]
         and i["continuation"]["toxicity"] > 0.3]
+
+dataset = Dataset.from_list(prompts_rtp) 
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='SFT Trainer')
@@ -101,10 +108,9 @@ if __name__ == "__main__":
     
     data_collator = DataCollatorForLanguageModeling(tokenizer=adversary.tokenizer, mlm=False)
     tokenized_dataset = dataset.map(
-            lambda x: preprocess_function(x, adversary.tokenizer),
+            lambda x: preprocess_rtp(x, adversary.tokenizer),
     )
-    print(tokenized_dataset)
-
+    
     wandb.log({"test":1})
     wandb.watch(adversary.model)
 
@@ -121,20 +127,9 @@ if __name__ == "__main__":
         train_dataset=tokenized_dataset["train"],
         data_collator=data_collator,
     )
-    """
-    sft_config = SFTConfig(
-        max_seq_length=512,
-        output_dir="sft_out/",
-        logging_steps=10,
-        report_to="wandb",
-        run_name="baseline"
-    )
-    trainer = SFTTrainer(
-        model="openai-community/gpt2", #adversary.model,
-        train_dataset=dataset["train"],
-        formatting_func=formatting_prompts_func,
-        args=sft_config
-    )
-    """
+    
     trainer.train()
     accelerator.end_training()
+    
+   # save best weights
+   # save every 2000
