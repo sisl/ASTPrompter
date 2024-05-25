@@ -48,7 +48,7 @@ def detoxify_selector(id2results:dict[str], attribute2thresh:dict[str], convo:Co
             return False
     return True
 
-def filter_corpus_toxicity(corpus:Corpus, id2results:dict[str], attribute2thresh:dict[str]={"toxicity": 0.9}):
+def filter_corpus_toxicity(corpus:Corpus, id2results:dict[str], attribute2thresh:dict[str]={"toxicity": 0.5}):
     return corpus.filter_conversations_by(lambda x: detoxify_selector(id2results, attribute2thresh, x))
 
 def conv_to_str(convo:Conversation):
@@ -84,7 +84,7 @@ def jsonl_to_dict(fname):
 
 if __name__ == "__main__":
     # download large conversation corpus
-    corpus = Corpus(filename=download("subreddit-AskReddit"))
+    corpus = Corpus(filename=download("reddit-corpus-small"))
     #score_corpus(corpus, 'detox_results.jsonl')
-    id2results = jsonl_to_dict('detox_ask_results.jsonl')
-    corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.9})
+    id2results = jsonl_to_dict('detox_results.jsonl')
+    corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
