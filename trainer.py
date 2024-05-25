@@ -87,9 +87,14 @@ class Trainer:
             save_name = args.save_name
         self.save_dir = os.path.join(args.save_dir, save_name)
         self.args = args
+
         self.global_step_counter_ = 0
 
-    def save(self, postfix=""):
+        # when we resume, we use self.global_epochs_
+        # to check how many epochs to sk
+        self.global_epochs_ = 0
+
+    def save(self, postfix="", entire_state=False):
         """save the model, optionally with a postfix
 
         Parameters
@@ -99,9 +104,14 @@ class Trainer:
             will make it this/here_postfix)
         """
 
-        self.adversary.model.save_pretrained((self.save_dir+("_"+postfix if postfix != "" else "").strip()))
-        self.adversary.tokenizer.save_pretrained((self.save_dir+("_"+postfix if postfix != "" else "").strip()))
-    
+        savedir = (self.save_dir+("_"+postfix if postfix != "" else "").strip())
+
+        if not entire_state:
+            self.adversary.model.save_pretrained(savedir)
+            self.adversary.tokenizer.save_pretrained(savedir)
+        else:
+            self.accelerator.save_state(savedir)
+
     def prepare(self, steps, batch=1):
         """Make a distributed dataset from stings for training.
 
@@ -161,7 +171,7 @@ class Trainer:
             how often to log to wandb
         """
         
-        for i, batch in enumerate(tqdm(iter(dataloader), total=len(dataloader))):
+        for i, batch in enumerate(iter(dataloader), total=len(dataloader)):
             loss, metrics = self.step(batch, log=(i % log_every == 0))
             self.accelerator.backward(loss / self.args.accumulate_steps)
 
@@ -175,6 +185,7 @@ class Trainer:
             if (i % log_every == 0):
                 metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
                 self.accelerator.log(metrics, step=self.global_step_counter_)
+                logger.info(f"MARGIN {round(metrics['rewards/reward_margin'],2)} and LOSS {round(metrics['training/loss'],2)} in STEP {self.global_step_counter_}/{self.args.total_steps}")
 
             self.global_step_counter_ += 1
 

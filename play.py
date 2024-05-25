@@ -8,8 +8,8 @@ from environment import episode
 import torch
 import random
 
-checkpoint = "./models/gpt2xl_test_checkpoint"
-checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-6000"
+checkpoint = "./sft_out/checkpoint-100000"
+# checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-16000"
 # checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-500"
 base = "openai-community/gpt2"
 defender = "openai-community/gpt2"

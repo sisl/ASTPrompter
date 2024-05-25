@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     # establish the arguments of this system
     parser = argparse.ArgumentParser(description='AST Trainer')
-    parser.add_argument('--epochs', type=int, default=1000,
+    parser.add_argument('--epochs', type=int, default=10000,
                         help='number of epochs to train')
     parser.add_argument('--batch_size', type=int, default=8,
                         help='each batch will be batch_size*accumulate_steps')
@@ -97,7 +97,7 @@ if __name__ == "__main__":
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=5e-7,
                         help='learning rate')
-    parser.add_argument('--beta', type=float, default=0.1,
+    parser.add_argument('--beta', type=float, default=0.01,
                         help='IPO/DPO beta')
     parser.add_argument('--accumulate_steps', type=int, default=1,
                         help='gradient accumulation steps')
@@ -105,6 +105,8 @@ if __name__ == "__main__":
                         help='maximum gradient norm to clip to')
     parser.add_argument('--warmup_steps', type=int, default=150,
                         help='number of warmup steps')
+    parser.add_argument('--total_steps', type=int, default=10000,
+                        help='total steps to train')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
     parser.add_argument('--save_name', type=str, default=None,
@@ -151,39 +153,49 @@ if __name__ == "__main__":
 
     # good vibes time
     for epoch in range(args.epochs):
+        logger.info(f"EPOCH {epoch} starting...")
+
         # shuffle the data
         R.shuffle(prompts)
         # experience the experience
         with trainer.accelerator.main_process_first():
-            logger.info("loading training data...")
-
             # IF we are currently teaching, collect teaching trajectories
             steps = []
 
             # we will keep rolling out until we get experience size
-            with tqdm(total=args.experience_size) as bar:
-                while len(steps) < args.experience_size:
-                    # check if we want to insert a teaching statement
-                    if R.random() < args.tox_mix:
-                        steps.append(trainer.teach("".join(R.choice(prompts_rtp))))
-                        bar.update(1)
-                    else:
-                        try:
-                            step = trainer.play(R.choice(prompts))
-                            bar.update(len(step))
-                            steps += step
-                        except RuntimeError:
-                            continue
-        # 
-        # breakpoint()
+            # with tqdm(total=args.experience_size) as bar:
+            while len(steps) < args.experience_size:
+                # check if we want to insert a teaching statement
+                if R.random() < args.tox_mix:
+                    steps.append(trainer.teach("".join(R.choice(prompts_rtp))))
+                    # bar.update(1)
+                else:
+                    try:
+                        step = trainer.play(R.choice(prompts))
+                        # bar.update(len(step))
+                        steps += step
+                    except RuntimeError:
+                        continue
 
-        # on *EACH THREAD*, prepare our dataset
+        logger.info(f"STEPS {len(steps)} will be ran in epoch {epoch}...")
+
+        # prepare our sub-dataset of this batch of experience
         dataset = trainer.prepare(steps, batch=args.batch_size)
+
+        logger.info(f"REPLAYING epoch {epoch}...")
         
-        # replay the experience
+        # replay the experience and have a good time
         trainer.epoch(dataset, log_every=10)
 
-        # have a good time
+        trainer.save("checkpoint", True)
+
+        if trainer.global_step_counter_ > args.total_steps:
+            logger.info(f"FINISHED TRAINING at {trainer.global_step_counter_} steps, breaking...")
+            break
+
+    if trainer.global_step_counter_ > args.total_steps:
+        logger.info(f"TRAINING STOPPED at {epoch} epochs. Bye!")
+
 
         # epoch_rewards = []
 
@@ -207,6 +219,5 @@ if __name__ == "__main__":
             # trainer.save("best")
             # best_reward = epoch_reward
 
-        trainer.save("checkpoint")
 
     trainer.finish()
