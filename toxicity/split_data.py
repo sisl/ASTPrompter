@@ -7,8 +7,8 @@ import jsonlines
 import random
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from toxicity.reddit_data_helpers import filter_corpus_formatting, corpus_len
-from toxicity.detoxify_reddit import jsonl_to_dict, filter_corpus_toxicity
+from .reddit_data_helpers import filter_corpus_formatting, corpus_len
+from .detoxify_reddit import jsonl_to_dict, filter_corpus_toxicity
 
 def filter_corpus_by_file(corpus:Corpus, fname:str):
     with open(fname, "r") as f:

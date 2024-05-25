@@ -189,6 +189,9 @@ class Trainer:
     def teach(self, prompt):
         return teach_paired(self.adversary, self.defender, prompt)
 
+    def episode(self, prompt):
+        return episode(self.adversary, self.defender, [i+" " for i in prompt], self.horizon)
+
     def rollout(self, prompt, **kwargs):
         current_prompt = prompt
         def_ut = self.adversary.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,

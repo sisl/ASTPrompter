@@ -48,18 +48,15 @@ R = random.Random(24)
 # if not TEACH:
 
 # load our initial corpus ahead of time
-corpus = Corpus(filename=download("reddit-corpus-small"))
-train_corp = filter_corpus_by_file(corpus, "data/train.txt")
-dev_corp = filter_corpus_by_file(corpus, "data/dev.txt")
-test_corp = filter_corpus_by_file(corpus, "data/test.txt")
+train_corp = filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")), "data/train.txt")
+dev_corp = filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")), "data/dev.txt")
 
 # corpus -> prompts
 train_prompts = corpus_to_prompts(train_corp)
-print(len(train_prompts))
+dev_prompts = corpus_to_prompts(dev_corp)
 #dev_prompts = corpus_to_prompts(dev_corp)
 #test_prompts = corpus_to_prompts(test_corp)
 
-"""
 with open("prompts.jsonl", 'r') as df:
     lines = df.readlines()
     data = json.loads("["+",".join(lines)+"]")
@@ -72,10 +69,7 @@ with open("prompts.jsonl", 'r') as df:
         R.choice([i["continuation"]["text"][0].lower(),
             i["continuation"]["text"][0]])+i["continuation"]["text"][1:])
         for i in data if i["continuation"]["toxicity"]
-        and i["continuation"]["toxicity"] > 0.3]
-
-prompts_tox_comments = key_list = list(map(lambda row: row[0], csv.reader(open('toxic_comments.csv'))))
-    
+                   and i["continuation"]["toxicity"] > 0.5]
 
 # fire this puppy off 
 if __name__ == "__main__":
@@ -106,6 +100,8 @@ if __name__ == "__main__":
                         help='maximum gradient norm to clip to')
     parser.add_argument('--warmup_steps', type=int, default=150,
                         help='number of warmup steps')
+    parser.add_argument('--eval_every', type=int, default=10,
+                        help='evaluate model every this many epochs')
     parser.add_argument('--total_steps', type=int, default=10000,
                         help='total steps to train')
     parser.add_argument('--save_dir', type=str, default='models',
@@ -173,9 +169,26 @@ if __name__ == "__main__":
 
     # good vibes time
     epoch = meta.get("epoch", 0)
+    best_score = meta.get("best", float("-inf"))
     while epoch < args.epochs:
         logger.info(f"EPOCH {epoch} starting...")
-        trainer.save("checkpoint", {"epoch": epoch})
+        trainer.save("checkpoint", {"epoch": epoch, "best": best_score})
+
+        if epoch % args.eval_every == 0:
+            logger.info(f"EVALUATING...")
+            rewards = []
+            for indx, i in enumerate(dev_prompts):
+                if indx % 30 == 0:
+                    logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
+                logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
+                rewards.append(trainer.episode(i).reward_w)
+            dev_score = sum(rewards)/len(rewards)
+
+            if dev_score > best_score:
+                logger.info(f"NEW BEST! {round(dev_score, 3)}")
+                trainer.accelerator.log({"training/dev_score": dev_score},
+                                        step=trainer.global_step_counter_)
+                trainer.save("best")
 
         # shuffle the data
         R.shuffle(train_prompts)
@@ -250,4 +263,3 @@ if __name__ == "__main__":
 
 
     trainer.finish()
-    """
