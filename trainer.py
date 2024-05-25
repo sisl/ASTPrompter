@@ -225,7 +225,7 @@ class Trainer:
             if (i % log_every == 0):
                 metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
                 self.accelerator.log(metrics, step=self.global_step_counter_)
-                logger.info(f"MARGIN {round(metrics['rewards/reward_margin'],2)} and LOSS {round(metrics['training/loss'],2)} in STEP {self.global_step_counter_}/{self.args.total_steps}")
+                logger.info(f"MARGIN {round(metrics['rewards/reward_margin'],5)} and LOSS {round(metrics['training/loss'],2)} in STEP {self.global_step_counter_}/{self.args.total_steps}")
 
             self.global_step_counter_ += 1
 

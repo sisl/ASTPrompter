@@ -180,8 +180,8 @@ if __name__ == "__main__":
             for indx, i in enumerate(dev_prompts):
                 if indx % 30 == 0:
                     logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
-                logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
-                rewards.append(trainer.episode(i).reward_w)
+                rewards += [j.reward_w for j in trainer.episode(i)]
+            logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
             dev_score = sum(rewards)/len(rewards)
 
             if dev_score > best_score:
