@@ -1,5 +1,5 @@
 """
-Split convokit data into train/dev/test (60/30/10)
+Split convokit data into train/dev/test (80/05/15)
 """
 from convokit import Corpus, download, Conversation
 import json
@@ -7,8 +7,8 @@ import jsonlines
 import random
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from reddit_data_helpers import filter_corpus_formatting, corpus_len
-from detoxify_reddit import jsonl_to_dict, filter_corpus_toxicity
+from toxicity.reddit_data_helpers import filter_corpus_formatting, corpus_len
+from toxicity.detoxify_reddit import jsonl_to_dict, filter_corpus_toxicity
 
 def filter_corpus_by_file(corpus:Corpus, fname:str):
     with open(fname, "r") as f:
@@ -23,11 +23,11 @@ def split_corpus(corpus:Corpus, train_fname:str, dev_fname:str, test_fname:str):
     corpus = filter_corpus_formatting(corpus)
 
     # Now split corpus into train/dev/test
-    # 60/30/10
+    # 80/05/15
     corpus_list = [conv for conv in corpus.iter_conversations()]
-    train, dev_test = train_test_split(corpus_list, train_size=0.6, random_state=24)
-    # 0.75 * 0.4 = 0.3
-    dev, test = train_test_split(dev_test, train_size=0.75, random_state=24)
+    train, dev_test = train_test_split(corpus_list, train_size=0.8, random_state=24)
+    # 0.25 * 0.2 = 0.05
+    dev, test = train_test_split(dev_test, train_size=0.25, random_state=24)
     
     # Write results to files for reproducibility
     with open(train_fname, "w") as train_file:
