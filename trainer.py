@@ -13,16 +13,13 @@ import torch
 from torch.nn.utils import clip_grad_norm_
 import os
 import wandb
+import json
 
 logger = get_logger("ast")
 
 class Trainer:
 
-    def __init__(self,
-                 args,
-                 model="openai-community/gpt2",
-                 defense="openai-community/gpt2",
-                 **kwargs):
+    def __init__(self, args, **kwargs):
 
         # cache horizon
         self.horizon = args.horizon
@@ -43,21 +40,16 @@ class Trainer:
         # just use it in our inference wrapper
 
         self.adversary = LanguageModel(dont_init=True)
-        if args.warm_start:
-            adversary_model = AutoModelForCausalLM.from_pretrained(args.warm_start, 
-                                                                   **kwargs.get("model_load_params", {}))
-            self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.warm_start)
-        else:
-            adversary_model = AutoModelForCausalLM.from_pretrained(model, **kwargs.get("model_load_params", {}))
-            self.adversary.tokenizer = AutoTokenizer.from_pretrained(model)
+        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
+        self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
         # our defender can be initialized normally 
         # and immeditaley frozen
-        self.defender = LanguageModel(defense if not args.defense else args.defense, model_load_params=kwargs.get("model_load_params", {}))
+        self.defender = LanguageModel(args.defense,
+                                      model_load_params=kwargs.get("model_load_params", {}))
         self.defender.model.eval()
         self.baseline = LanguageModel(args.baseline,
                                       model_load_params=kwargs.get("model_load_params", {}))
-        self.defender.model.eval()
         self.baseline.model.eval()
 
 
@@ -77,12 +69,12 @@ class Trainer:
         # because the accelerator may move models to weird places, we 
         # account for that
         (self.adversary.model, self.defender.model,
-         self.baseline.model, self.optimizer, self.scheduler) = self.accelerator.prepare(adversary_model, self.defender.model,
+         self.baseline.model, self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model, self.defender.model,
                                                                                          self.baseline.model, optimizer, scheduler)
         if args.wandb:
             wandb.watch(self.adversary.model)
 
-        save_name = f"dpo_model_{model.split('/')[-1]}"
+        save_name = f"model_{args.adversary.split('/')[-1]}_{args.defender.split('/')[-1]}"
         if args.save_name:
             save_name = args.save_name
         self.save_dir = os.path.join(args.save_dir, save_name)
@@ -90,11 +82,42 @@ class Trainer:
 
         self.global_step_counter_ = 0
 
-        # when we resume, we use self.global_epochs_
-        # to check how many epochs to sk
-        self.global_epochs_ = 0
+    @classmethod
+    def warm_start(cls, args, state_path, **kwargs):
+        """Warm start the trainer using the arguments and state from another path.
 
-    def save(self, postfix="", entire_state=False):
+        Parameters
+        ----------
+        args : Namespace
+            Default arguments, if none are provided.
+        state_path : str
+            The path to restore state from.
+
+        Returns
+        -------
+        Trainer, Any
+            The restored trainer, and any metadata that originally
+            provided to `self.save`'s `entire_state` argument..
+        """
+        
+        try:
+            # load the arguments state first
+            with open(os.path.join(state_path, "meta.json"), 'r') as df:
+                state = json.load(df)
+        except FileNotFoundError as e:
+            logger.info("checkpoint file not found! assuming this is our first run")
+            trainer = cls(args, **kwargs)
+            return trainer, {}
+
+        args.__dict__.update(state["arguments"])
+
+        trainer = cls(args, **kwargs)
+        trainer.global_step_counter_ = state["steps"]
+        trainer.accelerator.load_state(state_path)
+
+        return train, dict(state["train_state"])
+   
+    def save(self, postfix="", entire_state=None):
         """save the model, optionally with a postfix
 
         Parameters
@@ -102,6 +125,8 @@ class Trainer:
         postfix : str
             the postfix to save (i.e. if save name was this/here, postfix
             will make it this/here_postfix)
+        entire_state : Optional[Dict]
+            save training state, used for warm starts 
         """
 
         savedir = (self.save_dir+("_"+postfix if postfix != "" else "").strip())
@@ -110,7 +135,14 @@ class Trainer:
             self.adversary.model.save_pretrained(savedir)
             self.adversary.tokenizer.save_pretrained(savedir)
         else:
+            arguments = vars(self.args)
             self.accelerator.save_state(savedir)
+            with open(os.path.join(savedir, "meta.json"), 'w') as df:
+                json.dump({
+                    "arguments": arguments,
+                    "train_state": entire_state,
+                    "steps": self.global_step_counter_,
+                }, df)
 
     def prepare(self, steps, batch=1):
         """Make a distributed dataset from stings for training.

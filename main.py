@@ -111,12 +111,14 @@ if __name__ == "__main__":
                         help='prefix of the model save dir, default "models"')
     parser.add_argument('--save_name', type=str, default=None,
                         help='the folder place to save our model')
-    parser.add_argument('--warm_start', type=str, default=None,
+    parser.add_argument('--adversary', type=str, default='openai-community/gpt2',
                         help='start your policy here')
-    parser.add_argument('--defense', type=str, default='openai-community/gpt2-xl',
-                        help='start your defense here')
     parser.add_argument('--baseline', type=str, default='openai-community/gpt2',
-                        help='use this as your baseline model')
+                        help='use this as your baseline model for ipo')
+    parser.add_argument('--defense', type=str, default='openai-community/gpt2-xl',
+                        help='defense model')
+    parser.add_argument('--warm_start', type=str, default=None,
+                        help='start your model warm from this checkpoint')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
     parser.add_argument('--dpo', action="store_true", default=False,
@@ -131,32 +133,52 @@ if __name__ == "__main__":
     }
 
     # initialize accelerator once before??
-    trainer = Trainer(args,
-                      accelerator_kwargs=accelerator_kwargs,
-                      wandb_project_name="ast",
-                      wandb_kwargs={
-                          "wandb": {
-                              "entity": "jemoka", 
-                              # comment the line below out to log
-                              "mode": None if args.wandb else "disabled"
-                          }
-                      },
-                      model_load_params={
-                          # "load_in_8bit": True,
-                          # "attn_implementation": "flash_attention_2",
-                          # "torch_dtype": torch.float16
-                          # "gradient_checkpointing": True
-                      })
+    if not args.warm_start:
+        trainer = Trainer(args,
+                        accelerator_kwargs=accelerator_kwargs,
+                        wandb_project_name="ast",
+                        wandb_kwargs={
+                            "wandb": {
+                                "entity": "jemoka", 
+                                "mode": None if args.wandb else "disabled"
+                            }
+                        },
+                        model_load_params={
+                            # "load_in_8bit": True,
+                            # "attn_implementation": "flash_attention_2",
+                            # "torch_dtype": torch.float16
+                            # "gradient_checkpointing": True
+                        })
                       # ref="openai-community/gpt2")
+    else:
+        trainer, meta = Trainer.warm_start(args,
+                                           args.warm_start,
+                                           accelerator_kwargs=accelerator_kwargs,
+                                           wandb_project_name="ast",
+                                           wandb_kwargs={
+                                               "wandb": {
+                                                   "entity": "jemoka", 
+                                                   "mode": None if args.wandb else "disabled"
+                                               }
+                                           },
+                                           model_load_params={
+                                               # "load_in_8bit": True,
+                                               # "attn_implementation": "flash_attention_2",
+                                               # "torch_dtype": torch.float16
+                                               # "gradient_checkpointing": True
+                                    })
 
     ##########
 
     # good vibes time
-    for epoch in range(args.epochs):
+    epoch = meta.get("epoch", 0)
+    while epoch < args.epochs:
+        if epoch % 10 == 0:
+            logger.info(f"CHECKPOINTING {epoch}...")
+            trainer.save("checkpoint", {"epoch": epoch})
+
         logger.info(f"EPOCH {epoch} starting...")
 
-        # shuffle the data
-        R.shuffle(prompts)
         # experience the experience
         with trainer.accelerator.main_process_first():
             # IF we are currently teaching, collect teaching trajectories
@@ -186,8 +208,6 @@ if __name__ == "__main__":
         
         # replay the experience and have a good time
         trainer.epoch(dataset, log_every=10)
-
-        trainer.save("checkpoint", True)
 
         if trainer.global_step_counter_ > args.total_steps:
             logger.info(f"FINISHED TRAINING at {trainer.global_step_counter_} steps, breaking...")
@@ -219,5 +239,6 @@ if __name__ == "__main__":
             # trainer.save("best")
             # best_reward = epoch_reward
 
+        epoch += 1
 
     trainer.finish()
