@@ -239,6 +239,22 @@ if __name__ == "__main__":
     if trainer.global_step_counter_ > args.total_steps:
         logger.info(f"TRAINING STOPPED at {epoch} epochs. Bye!")
 
+    logger.info(f"EVALUATING...")
+    rewards = []
+    for indx, i in enumerate(dev_prompts):
+        if indx % 30 == 0:
+            logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
+        rewards += [j.reward_w for j in trainer.episode(i)]
+    logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
+    dev_score = sum(rewards)/len(rewards)
+
+    if dev_score > best_score:
+        logger.info(f"NEW BEST! {round(dev_score, 3)}")
+        trainer.accelerator.log({"training/dev_score": dev_score},
+                                step=trainer.global_step_counter_)
+        trainer.save("best")
+
+
 
         # epoch_rewards = []
 
