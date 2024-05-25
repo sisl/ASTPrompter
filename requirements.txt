@@ -7,3 +7,5 @@ accelerate
 trl
 peft
 wandb
+jsonlines
+scikit-learn
