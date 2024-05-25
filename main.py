@@ -1,6 +1,6 @@
 from convokit import Corpus, download, Conversation
-from toxicity.detoxify_reddit import filter_corpus_toxicity, jsonl_to_dict
-from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance
+from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance, corpus_len, corpus_to_prompts
+from toxicity.split_data import filter_corpus_by_file
 
 from accelerate import Accelerator
 from accelerate.utils import set_seed
@@ -40,25 +40,20 @@ R = random.Random(24)
 # TEACH = False
 
 # if not TEACH:
+
 # load our initial corpus ahead of time
 corpus = Corpus(filename=download("reddit-corpus-small"))
-id2results = jsonl_to_dict('detox_results.jsonl')
-corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
-corpus = filter_corpus_formatting(corpus)
-convos = list(corpus.conversations.values())
+train_corp = filter_corpus_by_file(corpus, "data/train.txt")
+dev_corp = filter_corpus_by_file(corpus, "data/dev.txt")
+test_corp = filter_corpus_by_file(corpus, "data/test.txt")
 
-# we only keep the last five utterances (and also discard the front
-# because the front is the self-post on reddit)
-prompts = [[clean_utterance(j.text, R)
-            for j in list(i.iter_utterances())
-            if j.text.strip() != "[deleted]"
-            and j.text.strip() != ""][1:][-2:]
-           for i in convos]
-prompts = [[j for j in i if j.strip() != ""]
-        for i in prompts]
-prompts = [i for i in prompts if len(i) != 0]
+# corpus -> prompts
+train_prompts = corpus_to_prompts(train_corp)
+print(len(train_prompts))
+#dev_prompts = corpus_to_prompts(dev_corp)
+#test_prompts = corpus_to_prompts(test_corp)
 
-
+"""
 with open("prompts.jsonl", 'r') as df:
     lines = df.readlines()
     data = json.loads("["+",".join(lines)+"]")
@@ -156,7 +151,7 @@ if __name__ == "__main__":
         logger.info(f"EPOCH {epoch} starting...")
 
         # shuffle the data
-        R.shuffle(prompts)
+        R.shuffle(train_prompts)
         # experience the experience
         with trainer.accelerator.main_process_first():
             # IF we are currently teaching, collect teaching trajectories
@@ -171,7 +166,7 @@ if __name__ == "__main__":
                     # bar.update(1)
                 else:
                     try:
-                        step = trainer.play(R.choice(prompts))
+                        step = trainer.play(R.choice(train_prompts))
                         # bar.update(len(step))
                         steps += step
                     except RuntimeError:
@@ -221,3 +216,4 @@ if __name__ == "__main__":
 
 
     trainer.finish()
+    """

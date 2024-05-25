@@ -227,6 +227,22 @@ def jsonl_to_dict(fname):
 def corpus_len(corpus:Corpus):
     return len([conv for conv in corpus.iter_conversations()])
 
+def corpus_to_prompts(corpus:Corpus):
+    convos = corpus.conversations.values()
+
+    # we only keep the last five utterances (and also discard the front
+    # because the front is the self-post on reddit)
+    prompts = [[clean_utterance(j.text, R)
+            for j in list(i.iter_utterances())
+            if j.text.strip() != "[deleted]"
+            and j.text.strip() != ""][1:][-2:]
+           for i in convos]
+    prompts = [[j for j in i if j.strip() != ""]
+        for i in prompts]
+    prompts = [i for i in prompts if len(i) != 0]
+    print(len(prompts))
+    return prompts
+
 # download large conversation corpus
 #corpus = Corpus(filename=download("reddit-corpus-small"))
 #convo = corpus.random_conversation()
