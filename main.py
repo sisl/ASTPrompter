@@ -147,6 +147,7 @@ if __name__ == "__main__":
                             # "gradient_checkpointing": True
                         })
                       # ref="openai-community/gpt2")
+        meta = {}
     else:
         trainer, meta = Trainer.warm_start(args,
                                            args.warm_start,
