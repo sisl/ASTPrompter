@@ -23,10 +23,14 @@ from datasets import Dataset
 
 import os
 
+import logging
+
 os.environ["WANDB_PROJECT"] = "ast"  # name your W&B project
 # os.environ["WANDB_LOG_MODEL"] = "checkpoint"  # log all model checkpoints
 
 logger = get_logger("ast")
+LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
+logger.basicConfig(format=LOG_FORMAT, level=logging.DEBUG)
 
 # Get token for Toxi-Gen prompts
 load_dotenv()
