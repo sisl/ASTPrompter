@@ -105,7 +105,6 @@ class Trainer:
             with open(os.path.join(state_path, "meta.json"), 'r') as df:
                 state = json.load(df)
         except FileNotFoundError as e:
-            logger.info("checkpoint file not found! assuming this is our first run")
             trainer = cls(args, **kwargs)
             return trainer, {}
 
