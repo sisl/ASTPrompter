@@ -224,6 +224,9 @@ def jsonl_to_dict(fname):
             id2results[id] = json.loads(results)
     return id2results
 
+def corpus_len(corpus:Corpus):
+    return len([conv for conv in corpus.iter_conversations()])
+
 # download large conversation corpus
 #corpus = Corpus(filename=download("reddit-corpus-small"))
 #convo = corpus.random_conversation()
