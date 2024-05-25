@@ -7,8 +7,8 @@ import jsonlines
 import random
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from toxicity.reddit_data_helpers import filter_corpus_formatting, corpus_len
-from toxicity.detoxify_reddit import jsonl_to_dict, filter_corpus_toxicity
+from reddit_data_helpers import filter_corpus_formatting, corpus_len
+from detoxify_reddit import jsonl_to_dict, filter_corpus_toxicity
 
 def filter_corpus_by_file(corpus:Corpus, fname:str):
     with open(fname, "r") as f:
@@ -27,7 +27,7 @@ def split_corpus(corpus:Corpus, train_fname:str, dev_fname:str, test_fname:str):
     corpus_list = [conv for conv in corpus.iter_conversations()]
     train, dev_test = train_test_split(corpus_list, train_size=0.6, random_state=24)
     # 0.75 * 0.4 = 0.3
-    dev, test = train_test_split(corpus_list, train_size=0.75, random_state=24)
+    dev, test = train_test_split(dev_test, train_size=0.75, random_state=24)
     
     # Write results to files for reproducibility
     with open(train_fname, "w") as train_file:
@@ -52,6 +52,6 @@ if __name__ == "__main__":
     # download large conversation corpus
     corpus = Corpus(filename=download("reddit-corpus-small"))
 
-    #split_corpus(corpus, "data/train.txt", "data/dev.txt", "data/test.txt")
+    split_corpus(corpus, "data/train.txt", "data/dev.txt", "data/test.txt")
     train_corpus = filter_corpus_by_file(corpus, "data/train.txt")
     print(corpus_len(train_corpus))
