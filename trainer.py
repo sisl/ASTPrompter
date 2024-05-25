@@ -14,6 +14,7 @@ from torch.nn.utils import clip_grad_norm_
 import os
 import wandb
 import json
+from accelerate.state import PartialState
 
 logger = get_logger("ast")
 
@@ -63,7 +64,7 @@ class Trainer:
 
         # all the mishmash to get
         self.beta = args.beta
-        optimizer = AdamW(adversary_model.parameters(), lr=args.lr)
+        optimizer = AdamW(self.adversary.model.parameters(), lr=args.lr)
         scheduler = LambdaLR(optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / (args.warmup_steps + 1)))
 
         # because the accelerator may move models to weird places, we 
@@ -74,7 +75,7 @@ class Trainer:
         if args.wandb:
             wandb.watch(self.adversary.model)
 
-        save_name = f"model_{args.adversary.split('/')[-1]}_{args.defender.split('/')[-1]}"
+        save_name = f"model_{args.adversary.split('/')[-1]}_{args.defense.split('/')[-1]}"
         if args.save_name:
             save_name = args.save_name
         self.save_dir = os.path.join(args.save_dir, save_name)
@@ -99,22 +100,27 @@ class Trainer:
             The restored trainer, and any metadata that originally
             provided to `self.save`'s `entire_state` argument..
         """
+
+        state = PartialState()
         
         try:
             # load the arguments state first
             with open(os.path.join(state_path, "meta.json"), 'r') as df:
                 state = json.load(df)
         except FileNotFoundError as e:
+            logger.warning("Saved checkppoint not found, starting from scratch!")
             trainer = cls(args, **kwargs)
             return trainer, {}
 
+        if args.__dict__ != state["arguments"]:
+            logger.warning("Loaded checkpoint has different args than args provided, defaulting to LOADED args!")
         args.__dict__.update(state["arguments"])
 
         trainer = cls(args, **kwargs)
         trainer.global_step_counter_ = state["steps"]
         trainer.accelerator.load_state(state_path)
 
-        return train, dict(state["train_state"])
+        return trainer, dict(state["train_state"])
    
     def save(self, postfix="", entire_state=None):
         """save the model, optionally with a postfix
@@ -135,13 +141,13 @@ class Trainer:
             self.adversary.tokenizer.save_pretrained(savedir)
         else:
             arguments = vars(self.args)
-            self.accelerator.save_state(savedir)
+            self.accelerator.save_state(savedir, safe_serialization=False)
             with open(os.path.join(savedir, "meta.json"), 'w') as df:
                 json.dump({
                     "arguments": arguments,
                     "train_state": entire_state,
                     "steps": self.global_step_counter_,
-                }, df)
+                }, df, indent=4)
 
     def prepare(self, steps, batch=1):
         """Make a distributed dataset from stings for training.
@@ -202,7 +208,7 @@ class Trainer:
             how often to log to wandb
         """
         
-        for i, batch in enumerate(iter(dataloader), total=len(dataloader)):
+        for i, batch in enumerate(iter(dataloader)):
             loss, metrics = self.step(batch, log=(i % log_every == 0))
             self.accelerator.backward(loss / self.args.accumulate_steps)
 

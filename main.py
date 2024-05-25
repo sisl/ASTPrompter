@@ -31,7 +31,8 @@ os.environ["WANDB_PROJECT"] = "ast"  # name your W&B project
 logger = get_logger("ast")
 
 LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
-logging.basicConfig(format=LOG_FORMAT, level=logging.DEBUG)
+logging.basicConfig(format=LOG_FORMAT, level=logging.ERROR)
+logger.setLevel(logging.DEBUG)
 
 # Get token for Toxi-Gen prompts
 load_dotenv()
@@ -120,7 +121,7 @@ if __name__ == "__main__":
                         help='start your policy here')
     parser.add_argument('--baseline', type=str, default='openai-community/gpt2',
                         help='use this as your baseline model for ipo')
-    parser.add_argument('--defense', type=str, default='openai-community/gpt2-xl',
+    parser.add_argument('--defense', type=str, default='openai-community/gpt2',
                         help='defense model')
     parser.add_argument('--warm_start', type=str, default=None,
                         help='start your model warm from this checkpoint')
@@ -178,11 +179,8 @@ if __name__ == "__main__":
     # good vibes time
     epoch = meta.get("epoch", 0)
     while epoch < args.epochs:
-        if epoch % 10 == 0:
-            logger.info(f"CHECKPOINTING {epoch}...")
-            trainer.save("checkpoint", {"epoch": epoch})
-
         logger.info(f"EPOCH {epoch} starting...")
+        trainer.save("checkpoint", {"epoch": epoch})
 
         # experience the experience
         with trainer.accelerator.main_process_first():
@@ -191,7 +189,13 @@ if __name__ == "__main__":
 
             # we will keep rolling out until we get experience size
             # with tqdm(total=args.experience_size) as bar:
+            # `last` is for logging purposes to log every 10 setps or so
+            last = 0
             while len(steps) < args.experience_size:
+                if last % 50 == 0:
+                    logger.debug(f"COLLECTED {len(steps)} < {args.experience_size} steps...")
+                last += 1
+
                 # check if we want to insert a teaching statement
                 if R.random() < args.tox_mix:
                     steps.append(trainer.teach("".join(R.choice(prompts_rtp))))
@@ -203,8 +207,9 @@ if __name__ == "__main__":
                         steps += step
                     except RuntimeError:
                         continue
+            logger.debug(f"COLLECTED {len(steps)} >= {args.experience_size} steps...")
 
-        logger.info(f"STEPS {len(steps)} will be ran in epoch {epoch}...")
+        logger.info(f"{len(steps)} STEPS will be ran in epoch {epoch}...")
 
         # prepare our sub-dataset of this batch of experience
         dataset = trainer.prepare(steps, batch=args.batch_size)
@@ -217,6 +222,8 @@ if __name__ == "__main__":
         if trainer.global_step_counter_ > args.total_steps:
             logger.info(f"FINISHED TRAINING at {trainer.global_step_counter_} steps, breaking...")
             break
+
+        epoch += 1
 
     if trainer.global_step_counter_ > args.total_steps:
         logger.info(f"TRAINING STOPPED at {epoch} epochs. Bye!")
@@ -244,6 +251,5 @@ if __name__ == "__main__":
             # trainer.save("best")
             # best_reward = epoch_reward
 
-        epoch += 1
 
     trainer.finish()
