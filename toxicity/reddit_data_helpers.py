@@ -2,7 +2,7 @@
 Helper functions for Reddit Conversation Corpus (RCC) to filter
 toxicity and correct formatting.
 """
-from convokit import Corpus, Conversation
+from convokit import Corpus, Conversation, download
 from bs4 import BeautifulSoup
 from html import unescape
 from detoxify import Detoxify
@@ -11,6 +11,9 @@ import jsonlines
 import re
 from tqdm import tqdm
 import random
+
+# fix random sede for reproducibility
+R = random.Random(24)
 
 """
 Address formatting issues in RCC
@@ -229,7 +232,6 @@ def corpus_len(corpus:Corpus):
 
 def corpus_to_prompts(corpus:Corpus):
     convos = corpus.conversations.values()
-
     # we only keep the last five utterances (and also discard the front
     # because the front is the self-post on reddit)
     prompts = [[clean_utterance(j.text, R)
@@ -240,11 +242,12 @@ def corpus_to_prompts(corpus:Corpus):
     prompts = [[j for j in i if j.strip() != ""]
         for i in prompts]
     prompts = [i for i in prompts if len(i) != 0]
-    print(len(prompts))
     return prompts
 
 # download large conversation corpus
 #corpus = Corpus(filename=download("reddit-corpus-small"))
+#prompts = corpus_to_prompts(corpus)
+#print(len(prompts))
 #convo = corpus.random_conversation()
 #print(filter_corpus_formatting(corpus))
 #score_corpus(corpus, 'detox_results.jsonl')
