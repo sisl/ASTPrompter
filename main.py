@@ -23,10 +23,16 @@ from datasets import Dataset
 
 import os
 
+import logging
+
 os.environ["WANDB_PROJECT"] = "ast"  # name your W&B project
 # os.environ["WANDB_LOG_MODEL"] = "checkpoint"  # log all model checkpoints
 
 logger = get_logger("ast")
+
+LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
+logging.basicConfig(format=LOG_FORMAT, level=logging.ERROR)
+logger.setLevel(logging.DEBUG)
 
 # Get token for Toxi-Gen prompts
 load_dotenv()
@@ -106,12 +112,14 @@ if __name__ == "__main__":
                         help='prefix of the model save dir, default "models"')
     parser.add_argument('--save_name', type=str, default=None,
                         help='the folder place to save our model')
-    parser.add_argument('--warm_start', type=str, default=None,
+    parser.add_argument('--adversary', type=str, default='openai-community/gpt2',
                         help='start your policy here')
-    parser.add_argument('--defense', type=str, default='openai-community/gpt2-xl',
-                        help='start your defense here')
     parser.add_argument('--baseline', type=str, default='openai-community/gpt2',
-                        help='use this as your baseline model')
+                        help='use this as your baseline model for ipo')
+    parser.add_argument('--defense', type=str, default='openai-community/gpt2',
+                        help='defense model')
+    parser.add_argument('--warm_start', type=str, default=None,
+                        help='start your model warm from this checkpoint')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
     parser.add_argument('--dpo', action="store_true", default=False,
@@ -126,29 +134,48 @@ if __name__ == "__main__":
     }
 
     # initialize accelerator once before??
-    trainer = Trainer(args,
-                      accelerator_kwargs=accelerator_kwargs,
-                      wandb_project_name="ast",
-                      wandb_kwargs={
-                          "wandb": {
-                              "entity": "jemoka", 
-                              # comment the line below out to log
-                              "mode": None if args.wandb else "disabled"
-                          }
-                      },
-                      model_load_params={
-                          # "load_in_8bit": True,
-                          # "attn_implementation": "flash_attention_2",
-                          # "torch_dtype": torch.float16
-                          # "gradient_checkpointing": True
-                      })
+    if not args.warm_start:
+        trainer = Trainer(args,
+                        accelerator_kwargs=accelerator_kwargs,
+                        wandb_project_name="ast",
+                        wandb_kwargs={
+                            "wandb": {
+                                "entity": "jemoka", 
+                                "mode": None if args.wandb else "disabled"
+                            }
+                        },
+                        model_load_params={
+                            # "load_in_8bit": True,
+                            # "attn_implementation": "flash_attention_2",
+                            # "torch_dtype": torch.float16
+                            # "gradient_checkpointing": True
+                        })
                       # ref="openai-community/gpt2")
+    else:
+        trainer, meta = Trainer.warm_start(args,
+                                           args.warm_start,
+                                           accelerator_kwargs=accelerator_kwargs,
+                                           wandb_project_name="ast",
+                                           wandb_kwargs={
+                                               "wandb": {
+                                                   "entity": "jemoka", 
+                                                   "mode": None if args.wandb else "disabled"
+                                               }
+                                           },
+                                           model_load_params={
+                                               # "load_in_8bit": True,
+                                               # "attn_implementation": "flash_attention_2",
+                                               # "torch_dtype": torch.float16
+                                               # "gradient_checkpointing": True
+                                    })
 
     ##########
 
     # good vibes time
-    for epoch in range(args.epochs):
+    epoch = meta.get("epoch", 0)
+    while epoch < args.epochs:
         logger.info(f"EPOCH {epoch} starting...")
+        trainer.save("checkpoint", {"epoch": epoch})
 
         # shuffle the data
         R.shuffle(train_prompts)
@@ -159,7 +186,13 @@ if __name__ == "__main__":
 
             # we will keep rolling out until we get experience size
             # with tqdm(total=args.experience_size) as bar:
+            # `last` is for logging purposes to log every 10 setps or so
+            last = 0
             while len(steps) < args.experience_size:
+                if last % 50 == 0:
+                    logger.debug(f"COLLECTED {len(steps)} < {args.experience_size} steps...")
+                last += 1
+
                 # check if we want to insert a teaching statement
                 if R.random() < args.tox_mix:
                     steps.append(trainer.teach("".join(R.choice(prompts_rtp))))
@@ -171,8 +204,9 @@ if __name__ == "__main__":
                         steps += step
                     except RuntimeError:
                         continue
+            logger.debug(f"COLLECTED {len(steps)} >= {args.experience_size} steps...")
 
-        logger.info(f"STEPS {len(steps)} will be ran in epoch {epoch}...")
+        logger.info(f"{len(steps)} STEPS will be ran in epoch {epoch}...")
 
         # prepare our sub-dataset of this batch of experience
         dataset = trainer.prepare(steps, batch=args.batch_size)
@@ -182,11 +216,11 @@ if __name__ == "__main__":
         # replay the experience and have a good time
         trainer.epoch(dataset, log_every=10)
 
-        trainer.save("checkpoint", True)
-
         if trainer.global_step_counter_ > args.total_steps:
             logger.info(f"FINISHED TRAINING at {trainer.global_step_counter_} steps, breaking...")
             break
+
+        epoch += 1
 
     if trainer.global_step_counter_ > args.total_steps:
         logger.info(f"TRAINING STOPPED at {epoch} epochs. Bye!")
