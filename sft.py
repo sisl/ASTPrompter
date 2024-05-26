@@ -55,7 +55,7 @@ with open("prompts.jsonl", 'r') as df:
         "continuation": R.choice([i["continuation"]["text"][0].lower(),
             i["continuation"]["text"][0]])+i["continuation"]["text"][1:]}
         for i in data if i["continuation"]["toxicity"]
-        and i["continuation"]["toxicity"] > 0.3]
+                   and i["continuation"]["toxicity"] > 0.5]
 
 dataset = Dataset.from_list(prompts_rtp) 
 
@@ -122,8 +122,10 @@ if __name__ == "__main__":
         logging_first_step=True,
         report_to="wandb",
         save_steps=10000,
-        num_train_epochs=20
-        # load_best_model_at_end=True
+        num_train_epochs=20,
+        max_steps=10000,
+        per_device_train_batch_size=8,
+        load_best_model_at_end=True
     )
 
     trainer = Trainer(
@@ -134,6 +136,7 @@ if __name__ == "__main__":
     )
     
     trainer.train()
+    trainer.save_model(f'best')
     accelerator.end_training()
     
    # save best weights
