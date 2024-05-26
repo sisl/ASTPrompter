@@ -9,7 +9,6 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.optim import AdamW
 from lm import *
 from peft import LoraConfig
-from environment import *
 import torch
 from torch.nn.utils import clip_grad_norm_
 import os
@@ -21,6 +20,9 @@ import tensorflow_datasets as tfds
 import random
 import pandas as pd
 import argparse
+import copy
+from toxicity.dxf import call_detoxify
+from environment import reward, ASTStep, RewardComponent
 
 logger = get_logger("ast")
 
@@ -28,8 +30,9 @@ class BadEvaluator:
 
     def __init__(self, args, **kwargs):
 
-        # cache horizon
+        # cache horizon and k
         self.horizon = args.horizon
+        self.k = args.k
 
         # initialize early the accelator
         self.accelerator = Accelerator(**kwargs.get("accelerator_kwargs", {}))
@@ -50,13 +53,10 @@ class BadEvaluator:
         # because the accelerator may move models to weird places, we 
         # account for that
         self.defender.model = self.accelerator.prepare(self.defender.model)
-
-        # get prompts
-        self.prompts = args.prompts
         
         self.args = args
 
-        save_name = f"eval_{wn.split('/')[-1]}"
+        save_name = f"eval_bad"
         if args.save_name:
             save_name = args.save_name
         self.save_dir = os.path.join(args.save_dir, save_name)
@@ -64,7 +64,7 @@ class BadEvaluator:
         self.args = args
         self.__results_cache = []
 
-    def _ds_to_df():
+    def ds_to_df(self):
         ds = tfds.load('bot_adversarial_dialogue/dialogue_datasets', split='train', shuffle_files=False, download=True)
         speakers = []
         texts = []
@@ -74,7 +74,7 @@ class BadEvaluator:
 
         for idx, example in enumerate(list(ds)):
             speakers.append(example["speaker_to_eval"].numpy())
-            texts.append(example["text"].numpy())
+            texts.append(str(example["text"].numpy()))
             labels.append(example["labels"].numpy())
             dialogue_ids.append(example["dialogue_id"].numpy())
             round_ids.append(example["round_id"].numpy())
@@ -85,9 +85,9 @@ class BadEvaluator:
 
         return pd.DataFrame(data)
 
-    def load_bad_data(k=100, seed=24, horizon=3):
+    def load_bad_data(self, seed=24, horizon=3):
         # Load to df
-        df = _ds_to_df()
+        df = self.ds_to_df()
         human_df = df[df["speaker"] == b'human']
         bad_human_df = human_df[human_df["label"] == 1]
         
@@ -102,10 +102,18 @@ class BadEvaluator:
             else:
                 id_to_turns[dialogue_id].append(text)
         
+        # Remove conversations with too few turns
+        drop_keys = []
+        for id in id_to_turns.keys():
+            if len(id_to_turns[id]) < horizon:
+                drop_keys.append(id)
+        for key in drop_keys:
+            id_to_turns.pop(key)
+
         # Get examples for eval
         keys = list(id_to_turns.keys())
         R = random.Random(seed)
-        selected_ids = R.choices(keys, k=k)
+        selected_ids = R.choices(keys, k=self.k)
         bad_prompts = []
         for id in selected_ids:
             turns = id_to_turns[id]
@@ -113,7 +121,7 @@ class BadEvaluator:
     
         return bad_prompts
 
-    def __handle_prompt(defender, ast_ut, prompt, **kwargs):
+    def handle_prompt(self, defender, ast_ut, prompt, **kwargs):
         """utility function to handle a single prompt rollout"""
         
         # expand a tree out at each stage to get a step
@@ -138,8 +146,8 @@ class BadEvaluator:
         return (ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox)
 
 
-    def episode(ast_prompts: list[str], defender: LanguageModel, depth : int, 
-                prompt_src: List[str], horizon=3, return_sequence=False, **kwargs):
+    def episode(self, ast_prompts: list[str], defender: LanguageModel, depth : int, 
+                prompt_src: list[str], horizon=3, return_sequence=False, **kwargs):
         """Perform a single episode of the environment.
 
         Parameters
@@ -166,9 +174,9 @@ class BadEvaluator:
 
         # Get current ast_ut
         ast_ut = ast_prompts[depth]
-
+     
         # rollouts, scoring each to figure out who won
-        ro = __handle_prompt(defender, ast_ut, prompt_src, **kwargs)
+        ro = self.handle_prompt(defender, ast_ut, prompt_src, **kwargs)
         ro_score = reward(*ro)
         prompt = copy.deepcopy(prompt_src)+[ro[0], ro[1]]
         # we will use ASTStep as a holder for results, but just don't provide
@@ -176,14 +184,14 @@ class BadEvaluator:
         steps.append(ASTStep("".join(prompt_src), ro[0], None, ro_score, None,
                             RewardComponent(ro[2], ro[3], ro[4], ro[-1])))
         if return_sequence:
-            return episode(ast_prompts, defender, depth+1, prompt, horizon-1, return_sequence=True, **kwargs)
+            return self.episode(ast_prompts, defender, depth+1, prompt, horizon-1, return_sequence=True, **kwargs)
         else:
-            steps += episode(ast_prompts, defender, depth+1, prompt, horizon-1, **kwargs)
+            steps += self.episode(ast_prompts, defender, depth+1, prompt, horizon-1, **kwargs)
             return steps
     
     def __call__(self, prompts, log_every=10):
-        for indx, i in enumerate(tqdm(iter(prompts), total=len(prompts))):
-            self.__results_cache += episode(i, self.defender, 0, [""], self.horizon)
+        for indx, i in enumerate(tqdm(prompts, total=len(prompts))):
+            self.__results_cache += self.episode(i, self.defender, 0, [""], self.horizon)
             if indx % log_every == 0:
                 self.report()
 
@@ -234,7 +242,7 @@ class BadEvaluator:
             },
             "meta": {
                 "count": len(self.__results_cache),
-                "adversary": self.args.weights,
+                "weights": "bad",
                 "defender": self.args.defense
             }
         }
@@ -264,5 +272,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     evaluator = BadEvaluator(args)
-    prompts = evaluator.load_bad_data(horizon=args.horizon, k=args.k)
+    prompts = evaluator.load_bad_data(horizon=args.horizon)
     evaluator(prompts)
