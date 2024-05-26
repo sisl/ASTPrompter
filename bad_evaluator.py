@@ -258,9 +258,11 @@ if __name__ == "__main__":
                         help='prefix of the model save dir, default "results"')
     parser.add_argument('--save_name', type=str, default=None,
                         help='what to name the results')
+    parser.add_argument('--k', type=int, default=50,
+                        help='how many examples to eval')
 
     args = parser.parse_args()
 
     evaluator = BadEvaluator(args)
-    prompts = evaluator.load_bad_data()
+    prompts = evaluator.load_bad_data(horizon=args.horizon, k=args.k)
     evaluator(prompts)
