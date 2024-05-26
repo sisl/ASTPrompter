@@ -213,7 +213,9 @@ class Trainer:
         
         for i, batch in enumerate(iter(dataloader)):
             loss, metrics = self.step(batch, log=(i % log_every == 0))
-            self.accelerator.backward(loss / self.args.accumulate_steps)
+            loss = loss / self.args.accumulate_steps
+            if not torch.isnan(loss):
+                self.accelerator.backward(loss)
 
             if (i % self.args.accumulate_steps) == 0:
                 gn = clip_grad_norm_(self.adversary.model.parameters(), self.args.max_gradient_norm).cpu().item()
@@ -279,6 +281,9 @@ class Trainer:
                                                               defender_logprobs_win,
                                                               defender_logprobs_loss)
         reward_accuracies = (chosen_rewards > rejected_rewards).float()
+
+        if torch.isnan(loses.mean()):
+            breakpoint()
 
         metrics = {
             "rewards/chosen": chosen_rewards.mean().cpu().item(),
