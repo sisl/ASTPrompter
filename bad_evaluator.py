@@ -55,8 +55,8 @@ class BadEvaluator:
         self.defender.model = self.accelerator.prepare(self.defender.model)
         
         self.args = args
-
-        save_name = f"eval_bad"
+       
+        save_name = f"eval_bad"  # Default save location
         if args.save_name:
             save_name = args.save_name
         self.save_dir = os.path.join(args.save_dir, save_name)
@@ -65,7 +65,11 @@ class BadEvaluator:
         self.__results_cache = []
 
     def ds_to_df(self):
+        """
+        Convert tfds Dataset -> pandas DataFrame to allow filtering the data
+        """
         ds = tfds.load('bot_adversarial_dialogue/dialogue_datasets', split='train', shuffle_files=False, download=True)
+        # This is the suff we care about
         speakers = []
         texts = []
         labels = []
@@ -86,12 +90,36 @@ class BadEvaluator:
         return pd.DataFrame(data)
 
     def load_bad_data(self, seed=24, horizon=3):
+        """
+        Get the data ready for eval!
+
+        1. tsds Datset -> pd DataFrame
+        2. filter df: we only care about user utterances from converations 
+        that are not ok (these will be the toxic ones)
+        3. group by dialogue_id and select the last horizon turns 
+        (this is where the toxicity happens)
+        4. select self.k conversations to evaluate on
+
+        Parameters
+        ----------
+        seed : int (default 24)
+            random seed for reproducibility when we select our conversations
+        
+        horizon : int (default 3)
+            we will take the last horizon turns of a conversation
+
+        Returns
+        --------
+        list[list[str]]
+            the conversations to eval on in the form
+            [['turn1', 'turn2', 'turn3'], ['turn1', 'turn2', 'turn3']]
+        """
         # Load to df
         df = self.ds_to_df()
         human_df = df[df["speaker"] == b'human']
         bad_human_df = human_df[human_df["label"] == 1]
         
-        # Get the last three turns
+        # Get the last horizon turns
         grouped = bad_human_df.sort_values(by="round_id").groupby("dialogue_id", as_index=False).apply(lambda x: x.tail(horizon)).reset_index()
         id_to_turns = {}
         for idx, row in grouped.iterrows():
@@ -152,12 +180,21 @@ class BadEvaluator:
 
         Parameters
         ----------
-        adversary : LanguageModel
-            The adversary model to generate AST from.
+        ast_prompts : list[str]
+            set of prompts to evaluate on for a single episode
+            form ['turn1', 'turn2', 'turn3']
+        
         defender : LanguageModel
             The defender model responding.
+        
+        depth : int
+            keep track of which turn we're on. current ast_ut is
+            ast_prompmts[depth]
+
         prompt_src : List[str]
-            The prompt set to start with.
+            The prompt set to start with. starts as [""] and then
+            we add subsequent turns
+
         horizon : int
             length of the horizon (number of turns)
 
