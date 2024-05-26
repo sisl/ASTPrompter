@@ -9,3 +9,5 @@ peft
 wandb
 jsonlines
 scikit-learn
+tensorflow
+tensorflow_datasets
