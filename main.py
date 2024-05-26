@@ -175,7 +175,7 @@ if __name__ == "__main__":
         logger.info(f"EPOCH {epoch} starting...")
         trainer.save("checkpoint", {"epoch": epoch, "best": best_score})
 
-        if epoch % args.eval_every == 0:
+        if epoch % args.eval_every == 0 and epoch != 0:
             logger.info(f"EVALUATING...")
             rewards = []
             for indx, i in enumerate(dev_prompts):
