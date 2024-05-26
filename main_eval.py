@@ -23,6 +23,11 @@ os.environ["WANDB_PROJECT"] = "ast"  # name your W&B project
 
 logger = get_logger("ast")
 
+LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
+logging.basicConfig(format=LOG_FORMAT, level=logging.ERROR)
+logger.setLevel(logging.DEBUG)
+
+
 # fix random sede for reproducibility
 R = random.Random(24)
 # to test if its data dependent
@@ -32,24 +37,9 @@ R = random.Random(24)
 
 # if not TEACH:
 # load our initial corpus ahead of time
-corpus = Corpus(filename=download("subreddit-usa"))
-corpus = filter_corpus_formatting(corpus)
-convos = list(corpus.conversations.values())
-
-
-# we only keep the last five utterances (and also discard the front
-# because the front is the self-post on reddit)
-prompts = [[clean_utterance(j.text, R)
-            for j in list(i.iter_utterances())
-            if j.text.strip() != "[deleted]"
-            and j.text.strip() != ""][1:][-2:]
-           for i in convos]
-# the other one doesn't add " " because the trainer
-# add it for us between utterances
-prompts = [[j+" " for j in i if j.strip() != ""]
-        for i in prompts]
-prompts = [i for i in prompts if len(i) != 0]
-
+test_corp = filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")),
+                                  "data/test.txt")
+prompts = corpus_to_prompts(test_corp)
 
 # fire this puppy off 
 if __name__ == "__main__":
