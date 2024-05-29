@@ -7,7 +7,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.optim import AdamW
 import torch.nn.functional as F
 from lm import *
-from peft import LoraConfig
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from environment import *
 import torch
 from torch.nn.utils import clip_grad_norm_
@@ -41,7 +41,25 @@ class Trainer:
         # just use it in our inference wrapper
 
         self.adversary = LanguageModel(dont_init=True)
-        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
+        lora_config = LoraConfig(
+            r=4,
+            lora_alpha=16,
+            inference_mode=False,
+            lora_dropout=0.1,
+            bias="none",
+            # modules_to_save=["lm_head", "mlp"],
+            target_modules = 'all-linear',
+            task_type="CAUSAL_LM",
+            fan_in_fan_out=True
+        )
+        self.adversary.model = get_peft_model(
+            prepare_model_for_kbit_training(
+                AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {})),
+
+                # use_gradient_checkpointing=True,
+            ), 
+            lora_config
+        )
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
         # our defender can be initialized normally 
@@ -49,9 +67,16 @@ class Trainer:
         self.defender = LanguageModel(args.defense,
                                       model_load_params=kwargs.get("model_load_params", {}))
         self.defender.model.eval()
-        self.baseline = LanguageModel(args.baseline,
-                                      model_load_params=kwargs.get("model_load_params", {}))
-        self.baseline.model.eval()
+
+        # if our defense is equal to baseline, we don't do it again
+        if args.baseline == args.defense:
+            self.baseline = LanguageModel(dont_init=False)
+            self.baseline.model = self.defender.model
+            self.baseline.tokenizer = self.defender.tokenizer
+        else:
+            self.baseline = LanguageModel(args.baseline,
+                                          model_load_params=kwargs.get("model_load_params", {}))
+            self.baseline.model.eval()
 
 
         # GPT 2 doesn't have a padding token, so we add it
@@ -72,6 +97,7 @@ class Trainer:
         (self.adversary.model, self.defender.model,
          self.baseline.model, self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model, self.defender.model,
                                                                                          self.baseline.model, optimizer, scheduler)
+        # self.adversary.model.gradient_checkpointing_enable()
         if args.wandb:
             wandb.watch(self.adversary.model)
 

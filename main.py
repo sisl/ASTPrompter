@@ -126,6 +126,7 @@ if __name__ == "__main__":
 
     # if we are CPU, we have to do it here BEFORE argparse
     accelerator_kwargs = {
+        "mixed_precision": 'fp16'
         # "cpu": True
     }
 
@@ -143,7 +144,7 @@ if __name__ == "__main__":
                         model_load_params={
                             # "load_in_8bit": True,
                             # "attn_implementation": "flash_attention_2",
-                            # "torch_dtype": torch.float16
+                            "torch_dtype": torch.float16
                             # "gradient_checkpointing": True
                         })
                       # ref="openai-community/gpt2")
@@ -162,7 +163,7 @@ if __name__ == "__main__":
                                            model_load_params={
                                                # "load_in_8bit": True,
                                                # "attn_implementation": "flash_attention_2",
-                                               # "torch_dtype": torch.float16
+                                               "torch_dtype": torch.float16
                                                # "gradient_checkpointing": True
                                     })
 
