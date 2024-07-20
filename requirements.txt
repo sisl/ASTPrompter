@@ -4,7 +4,9 @@ detoxify
 convokit
 bs4
 accelerate
-trl
+transformers
+tokenizers
+torch
 peft
 wandb
 jsonlines
