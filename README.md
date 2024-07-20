@@ -66,4 +66,4 @@ If this was useful, please consider citing:
 }
 ```
 
-If you run into any issues, please email `{houjun,ahardy} at stanford dot edu`.
+If you run into any issues, please feel free to email `{houjun,ahardy} at stanford dot edu`.
