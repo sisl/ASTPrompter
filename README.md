@@ -55,7 +55,7 @@ python main_eval.py --help
 ```
 
 ## Citing the Work
-If this was useful, please consider citing:
+If the code or ideas contained here was useful for your porject, please cite our work at:
 
 ```
 @misc{hardy2024astprompter,
