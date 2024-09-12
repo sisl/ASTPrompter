@@ -8,11 +8,11 @@ from environment import episode
 import torch
 import random
 
-checkpoint = "./sft_out/checkpoint-100000"
+checkpoint = "./models/TL_v_TL_beta_1e-1_best"
 # checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-16000"
 # checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-500"
-base = "openai-community/gpt2"
-defender = "openai-community/gpt2"
+base = "TinyLlama/TinyLlama_v1.1"
+defender = "TinyLlama/TinyLlama_v1.1"
 
 # load our initial corpus ahead of time
 corpus = Corpus(filename=download("reddit-corpus-small"))
@@ -36,7 +36,7 @@ model = AutoModelForCausalLM.from_pretrained(checkpoint)
 model_base = AutoModelForCausalLM.from_pretrained(base)
 # model_defender = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="flash_attention_2", load_in_4bit=True, torch_dtype=torch.float16)
 model_defender = AutoModelForCausalLM.from_pretrained(defender)
-tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama_v1.1")
 tokenizer_defender = AutoTokenizer.from_pretrained(defender)
 
 adversary = LanguageModel(dont_init=True)

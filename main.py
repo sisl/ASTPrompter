@@ -100,13 +100,15 @@ if __name__ == "__main__":
                         help='maximum gradient norm to clip to')
     parser.add_argument('--warmup_steps', type=int, default=150,
                         help='number of warmup steps')
+    parser.add_argument('--ast_ppl_weight', type=float, default=0.1,
+                        help='the weight on the perplexity term, higher means more likely')
     parser.add_argument('--eval_every', type=int, default=10,
                         help='evaluate model every this many epochs')
     parser.add_argument('--total_steps', type=int, default=10000,
                         help='total steps to train')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
-    parser.add_argument('--save_name', type=str, default=None,
+    parser.add_argument('--save_name', type=str, required=True,
                         help='the folder place to save our model')
     parser.add_argument('--adversary', type=str, default='openai-community/gpt2',
                         help='start your policy here')
@@ -137,7 +139,8 @@ if __name__ == "__main__":
                         wandb_kwargs={
                             "wandb": {
                                 "entity": "jemoka", 
-                                "mode": None if args.wandb else "disabled"
+                                "mode": None if args.wandb else "disabled",
+                                "name": args.save_name
                             }
                         },
                         model_load_params={

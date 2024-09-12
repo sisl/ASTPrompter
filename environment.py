@@ -50,7 +50,8 @@ def soft_sigmoid(x):
         return x/abs(x)
     return ((1/(1+math.exp(-x/10)))-0.5)*2
 
-def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox, tox_threshold=0.5):
+def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, 
+           def_tox, tox_threshold=0.5, ast_ppl_weight=0.1):
     """The Reward Function.
 
     Parameters
@@ -86,7 +87,8 @@ def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox, tox_threshol
             # r -= 0.1*step.ast_ppl
         # except ValueError:
             # breakpoint()
-    r = tox_score - 0.1*ast_ppl
+    r = tox_score - ast_ppl_weight*ast_ppl
+    # breakpoint()
 
     # if r > 3:
         # breakpoint()
@@ -141,7 +143,7 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     return (ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox)
 
 def teach_paired(adversary: LanguageModel, defender: LanguageModel,
-                 prompt: str, **kwargs):
+                 prompt: str, reward_options={}, **kwargs):
 # , response: str
     """Supervisorily the LM to say somethnig
 
@@ -173,8 +175,8 @@ def teach_paired(adversary: LanguageModel, defender: LanguageModel,
     ro1 = __handle_prompt(defender, adversary, [prompt], force_ast=response, **kwargs)
     ro2 = __handle_prompt(defender, adversary, [prompt], **kwargs)
 
-    ro1_score = reward(*ro1)
-    ro2_score = reward(*ro2)
+    ro1_score = reward(*ro1, **reward_options)
+    ro2_score = reward(*ro2, **reward_options)
 
     # because we are forcing, we always assign ro1 to be the win
     win = ro1
@@ -189,7 +191,7 @@ def teach_paired(adversary: LanguageModel, defender: LanguageModel,
 
 def episode_paired(adversary: LanguageModel, defender: LanguageModel,
                    prompt: List[str], horizon_remaining=3,
-                   difference_threshold=0.2, **kwargs):
+                   difference_threshold=0.2, reward_options={}, **kwargs):
     """create paired aststep data
 
     Parameters
@@ -218,14 +220,14 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
     ro1 = __handle_prompt(defender, adversary, prompt, **kwargs)
     ro2 = __handle_prompt(defender, adversary, prompt, **kwargs)
 
-    ro1_score = reward(*ro1)
-    ro2_score = reward(*ro2)
+    ro1_score = reward(*ro1, **reward_options)
+    ro2_score = reward(*ro2, **reward_options)
 
     if abs(ro1_score-ro2_score) < difference_threshold:
         # try again
         return episode_paired(adversary, defender,
                               prompt, horizon_remaining=horizon_remaining,
-                              difference_threshold=difference_threshold, **kwargs)
+                              difference_threshold=difference_threshold, reward_options=reward_options, **kwargs)
 
     # DPO/IPO expects *paired* responses
     if ro1_score >= ro2_score:
@@ -249,8 +251,8 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
 
     # recursively traverse down the tree and rollout each of these
     # prompts until we hit an ending
-    steps += episode_paired(adversary, defender, prompt_win, horizon_remaining-1, difference_threshold=difference_threshold, **kwargs)
-    steps += episode_paired(adversary, defender, prompt_loose, horizon_remaining-1, difference_threshold=difference_threshold, **kwargs)
+    steps += episode_paired(adversary, defender, prompt_win, horizon_remaining-1, difference_threshold=difference_threshold, reward_options=reward_options, **kwargs)
+    steps += episode_paired(adversary, defender, prompt_loose, horizon_remaining-1, difference_threshold=difference_threshold, reward_options=reward_options, **kwargs)
 
     return steps
 
@@ -261,7 +263,7 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
 # steps
 
 def episode(adversary: LanguageModel, defender: LanguageModel,
-            prompt_src: List[str], horizon=5, return_sequence=False, **kwargs):
+            prompt_src: List[str], horizon=5, return_sequence=False, reward_options={}, **kwargs):
     """Perform a single episode of the environment.
 
     Parameters
@@ -288,7 +290,7 @@ def episode(adversary: LanguageModel, defender: LanguageModel,
 
     # rollouts, scoring each to figure out who won
     ro = __handle_prompt(defender, adversary, prompt_src, **kwargs)
-    ro_score = reward(*ro)
+    ro_score = reward(*ro, **reward_options)
     prompt = copy.deepcopy(prompt_src)+[ro[0], ro[1]]
     # we will use ASTStep as a holder for results, but just don't provide
     # a "loosing" response

@@ -184,13 +184,16 @@ class Trainer:
 
     def play(self, prompt):
         return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], 
-                self.horizon, difference_threshold=self.args.threshold)
+                self.horizon, difference_threshold=self.args.threshold, 
+                              reward_options={"ast_ppl_weight": self.args.ast_ppl_weight})
 
     def teach(self, prompt):
-        return teach_paired(self.adversary, self.defender, prompt)
+        return teach_paired(self.adversary, self.defender, prompt, 
+                            reward_options={"ast_ppl_weight": self.args.ast_ppl_weight})
 
     def episode(self, prompt):
-        return episode(self.adversary, self.defender, [i+" " for i in prompt], self.horizon)
+        return episode(self.adversary, self.defender, [i+" " for i in prompt], self.horizon,
+                       reward_options={"ast_ppl_weight": self.args.ast_ppl_weight})
 
     def rollout(self, prompt, **kwargs):
         current_prompt = prompt
