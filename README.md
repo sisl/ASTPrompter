@@ -1,6 +1,6 @@
 # Toxicity Elicitation with AST
 
-This is the source code for our work `ASTPrompter: Weakly Supervised Automated Language Model Red-Teaming to Identify Likely Toxic Prompts`.
+This is the source code for our work [ASTPrompter: Weakly Supervised Automated Language Model Red-Teaming to Identify Likely Toxic Prompts](https://arxiv.org/abs/2407.09447).
 
 ## Setting Up
 
