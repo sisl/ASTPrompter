@@ -24,7 +24,7 @@ For weak supervision, we also prepared the `RealToxicityPrompts` dataset; for ev
 To train a toxicity elicitation model with the data given above, use
 
 ```bash
-python main.py
+python main.py --save_name NAME_OF_YOUR_SAVE_DIR
 ```
 
 By default, this scheme will use `gpt2` as both the adversary and the defender, and place the resulting model in `./models`
