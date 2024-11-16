@@ -248,15 +248,20 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
 
 # first create the tree structure -> top node is prompt -> children are convo turns
 class Node:
-    def __init__(self, state, parent=None):
+    def __init__(self, state: List[str], parent=None):
         self.state = state         # The state of the game at this node -> current conversation
         self.parent = parent       # Parent node -> prompt or convo turn above
         self.children = []         # List of child nodes
         self.value = 0             # Value/reward of this node - initially is immediate reward, will backprogogate 
-        self.astUtt = []           # string of adversarial utterance from that step
+        self.astUtt = ""           # string of adversarial utterance from that step
+        self.wUtt = ""              # only used for parent nodes to store step into
+        self.lUtt = ""              # only used for parent nodes to store step into
+        self.wValue = 0             # only used for parent nodes to store step into
+        self.lValue = 0             # only used for parent nodes to store step into
+
 
     def add_child(self, child_state):
-        # create new child node given newstate and parent
+        # create new child node given newstate and parent - child_state should be passed in as List[str]
         child = Node(state=child_state, parent=self)
         # append child to parent's self.children
         self.children.append(child)
@@ -265,11 +270,11 @@ class Node:
 
 # creates 1 child node (with immediate reward and adding to parent .child[]) - "1 step/convo turn"
 # Expand a new child node - generate new turn
-def expand(node, defender, adversary, reward_options, **kwargs):    
+def expand(node, defender, adversary, **kwargs):    
     # handle_prompt returns (ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox) -> assumes node.state is prompt
     stepInfo = __handle_prompt(defender, adversary, node.state, **kwargs)
 
-    # new state is the entire conversation so far (prev convo + ast_utt + defender_utt)
+    # new state is the entire conversation so far (prev convo + ast_utt + defender_utt) - new stateshould be list[str]
     newState = copy.deepcopy(node.state)+[stepInfo[0], stepInfo[1]]
 
     # create and return new child node and adds child to parent's child list
@@ -279,34 +284,34 @@ def expand(node, defender, adversary, reward_options, **kwargs):
     newNode.astUtt = stepInfo[0]
 
     # add immediate reward to newNode
-    reward = reward(*stepInfo, **reward_options)
-    newNode.value = reward
+    immediateReward = reward(*stepInfo)
+    newNode.value = immediateReward
 
     return newNode
 
 # builds tree from root down, each node has only immdiate reward
-def build_tree(node, depth, difference_threshold, horizon_remaining, defender, adversary, reward_options, **kwargs):
+def build_tree(node, depth, difference_threshold, horizon_remaining, defender, adversary, **kwargs):
     # base case: recursed to depth of horizon
     if depth >= horizon_remaining:
         return
 
     # Expand two children for the current node - children have immediate rewards and parent has them in .child list
-    child1 = expand(node, defender, adversary, reward_options, **kwargs)
-    child2 = expand(node, defender, adversary, reward_options, **kwargs)
+    child1 = expand(node, defender, adversary, **kwargs)
+    child2 = expand(node, defender, adversary, **kwargs)
 
     # incorporate difference threshold
     while abs(child1.value - child2.value) < difference_threshold:
         # while difference in value is too difference -> keep generating new children
-        child1 = expand(node, defender, adversary, reward_options, **kwargs)
-        child2 = expand(node, defender, adversary, reward_options, **kwargs)
+        child1 = expand(node, defender, adversary, **kwargs)
+        child2 = expand(node, defender, adversary, **kwargs)
         # note (unlikely) potential to enter infinite loop
 
     # Recursively expand the children nodes
-    build_tree(child1, depth + 1, difference_threshold, horizon_remaining, defender, adversary, reward_options, **kwargs)
-    build_tree(child2, depth + 1, difference_threshold, horizon_remaining, defender, adversary, reward_options, **kwargs)
+    build_tree(child1, depth + 1, difference_threshold, horizon_remaining, defender, adversary, **kwargs)
+    build_tree(child2, depth + 1, difference_threshold, horizon_remaining, defender, adversary, **kwargs)
         
 # starting from leaf nodes, backprop rewards with eqn reward = immediate reward + gamma * child node rewards
-def backup(node, gamma, steps, horizon_remaining):
+def backup(node, gamma, horizon_remaining):
     # Helper function to recursively gather all nodes at a given depth
     def get_nodes_at_depth(current_node, current_depth, target_depth, nodes_at_depth):
         if current_depth == target_depth:
@@ -334,22 +339,33 @@ def backup(node, gamma, steps, horizon_remaining):
             # Update the parent node’s value
             current_node.value += gamma * wNode.value
 
-            # Record the step
-            step = ASTStep(
-                # is this the corrent first argument in step?? (whole convo so far)
-                # step = ASTStep("".join(prompt), win[0], lost[0], reward_w, reward_l, None)
-                current_node.state,
-                wNode.astUtt,
-                lNode.astUtt,
-                wNode.value,
-                lNode.value,
-                None
-            )
-            steps.append(step)
+            # update parent node step info
+            current_node.wUtt = wNode.astUtt
+            current_node.lUtt = lNode.astUtt
+            current_node.wValue = wNode.value
+            current_node.lValue = lNode.value
+
+# turn tree into series of steps (root, down, left to right) - same as original ASTPrompter formulation
+def tree2steps(node, steps, horizon_remaining):
+
+    # start at root node -> traverse top to bottom, L -> R
+    # return when hit horizon
+    if horizon_remaining == 0:
+        return steps
+
+    # Record the step
+    # step = ASTStep("".join(prompt), win[0], lost[0], reward_w, reward_l, None)
+    step = ASTStep("".join(node.state), node.wUtt, node.lUtt, node.wValue, node.lValue, None)
+    steps.append(step)
+
+    # recurse one level down and add those steps
+    tree2steps(node.children[0], steps, horizon_remaining - 1)
+    tree2steps(node.children[1], steps, horizon_remaining - 1)
+
 
 def episode_paired_sparseSample(adversary: LanguageModel, defender: LanguageModel,
                    prompt: List[str], horizon_remaining=3,
-                   difference_threshold=0.2, reward_options={"gamma": 0.9}, **kwargs):
+                   difference_threshold=0.2, **kwargs):
     
     steps = []
     
@@ -357,10 +373,13 @@ def episode_paired_sparseSample(adversary: LanguageModel, defender: LanguageMode
     root = Node(state=prompt, parent=None)
 
     # build tree - each reward is just immediate reward, start at depth is 0
-    build_tree(root, 0, difference_threshold, horizon_remaining, defender, adversary, reward_options, **kwargs)
+    build_tree(root, 0, difference_threshold, horizon_remaining, defender, adversary, **kwargs)
 
-    # backpropogate rewards up tree and get list of steps - want reward_options to be gamma value
-    backup(root, reward_options['gamma'], steps, horizon_remaining)
+    # backpropogate rewards up tree
+    backup(root, 0.9, horizon_remaining)
+
+    # turn tree with back-propagated rewards into a list of steps
+    tree2steps(root, steps, horizon_remaining)
 
     return steps
 
