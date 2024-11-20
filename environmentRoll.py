@@ -263,8 +263,6 @@ class Node:
     def add_child(self, child_state):
         # create new child node given newstate and parent - child_state should be passed in as List[str]
         child = Node(state=child_state, parent=self)
-        # append child to parent's self.children
-        self.children.append(child)
         # return child
         return child
 
@@ -278,21 +276,23 @@ def expand(node, defender, adversary, **kwargs):
     newState = copy.deepcopy(node.state)+[stepInfo[0], stepInfo[1]]
 
     # create and return new child node and adds child to parent's child list
+    #newNode = Node(state=newState, parent=node)
     newNode = node.add_child(newState)
-
+    
     # add adversarial utterance as a node feature
     newNode.astUtt = stepInfo[0]
 
     # add immediate reward to newNode
     immediateReward = reward(*stepInfo)
     newNode.value = immediateReward
+    node.children.append(newNode)
 
     return newNode
 
 # builds tree from root down, each node has only immdiate reward
-def build_tree(node, depth, difference_threshold, horizon_remaining, defender, adversary, **kwargs):
+def build_tree(node, difference_threshold, horizon_remaining, defender, adversary, **kwargs):
     # base case: recursed to depth of horizon
-    if depth >= horizon_remaining:
+    if horizon_remaining < 1:
         return
 
     # Expand two children for the current node - children have immediate rewards and parent has them in .child list
@@ -300,16 +300,39 @@ def build_tree(node, depth, difference_threshold, horizon_remaining, defender, a
     child2 = expand(node, defender, adversary, **kwargs)
 
     # incorporate difference threshold
-    while abs(child1.value - child2.value) < difference_threshold:
-        # while difference in value is too difference -> keep generating new children
-        child1 = expand(node, defender, adversary, **kwargs)
-        child2 = expand(node, defender, adversary, **kwargs)
-        # note (unlikely) potential to enter infinite loop
+    # while abs(child1.value - child2.value) < difference_threshold:
+    #     # while difference in value is too difference -> keep generating new children
+    #     child1 = expand(node, defender, adversary, **kwargs)
+    #     child2 = expand(node, defender, adversary, **kwargs)
+    #     #note (unlikely) potential to enter infinite loop
 
     # Recursively expand the children nodes
-    build_tree(child1, depth + 1, difference_threshold, horizon_remaining, defender, adversary, **kwargs)
-    build_tree(child2, depth + 1, difference_threshold, horizon_remaining, defender, adversary, **kwargs)
-        
+    build_tree(child1, difference_threshold, horizon_remaining - 1, defender, adversary, **kwargs)
+    build_tree(child2, difference_threshold, horizon_remaining - 1, defender, adversary, **kwargs)
+
+# helper function to print out the tree
+def print_tree(node, horizon_remaining, level):
+    """
+    Prints the tree structure starting from the given node.
+
+    Parameters:
+    - node: The current node to print.
+    - level: The current depth in the tree (used for indentation).
+    """
+    
+    # start at root node -> traverse top to bottom, L -> R
+    # return when hit horizon
+    if horizon_remaining == 0:
+        print("reached horizon")
+        return
+
+    # Print the current node's state and value
+    print("you are at level:", level)
+    print(f"Node (Level {level}): State={node.state}, Value={node.value}")
+
+    print_tree(node.children[0], horizon_remaining - 1, level + 1)
+    print_tree(node.children[1], horizon_remaining - 1, level + 1)
+
 # starting from leaf nodes, backprop rewards with eqn reward = immediate reward + gamma * child node rewards
 def backup(node, gamma, horizon_remaining):
     # Helper function to recursively gather all nodes at a given depth
@@ -352,11 +375,16 @@ def tree2steps(node, steps, horizon_remaining):
     # return when hit horizon
     if horizon_remaining == 0:
         return steps
-
+    
+    #print(f"Node: State={node.state}, Value={node.value}")
+    #print(f"Num children nodes={len(node.children)}")
+    #print(f"child1 state: {node.children[0].state} child2 state: {node.children[1].state}")
+    
     # Record the step
     # step = ASTStep("".join(prompt), win[0], lost[0], reward_w, reward_l, None)
     step = ASTStep("".join(node.state), node.wUtt, node.lUtt, node.wValue, node.lValue, None)
     steps.append(step)
+    #rewards.append(node.value)
 
     # recurse one level down and add those steps
     tree2steps(node.children[0], steps, horizon_remaining - 1)
@@ -368,17 +396,26 @@ def episode_paired_sparseSample(adversary: LanguageModel, defender: LanguageMode
                    difference_threshold=0.2, **kwargs):
     
     steps = []
+    #rewards = []
     
     # create root node from non-toxic prompt
     root = Node(state=prompt, parent=None)
-
+   
     # build tree - each reward is just immediate reward, start at depth is 0
-    build_tree(root, 0, difference_threshold, horizon_remaining, defender, adversary, **kwargs)
+    build_tree(root, difference_threshold, horizon_remaining, defender, adversary, **kwargs)
 
-    # backpropogate rewards up tree
-    backup(root, 0.9, horizon_remaining)
-
+    #print("tree before beack up rewards")
+    #print_tree(root, horiz_rem4, level=0)
+    # print("======================================================================")
+    # print("=====================END TREE, START STEPS============================")
+    # print("======================================================================")
+    # backpropogate rewards up tree - gamma is 0.3 right now
+    backup(root, 0.3, horizon_remaining)
+    
+    #print("tree after back up rewards")
+    #print_tree(root, level=0)
     # turn tree with back-propagated rewards into a list of steps
+    # add reward for the root node
     tree2steps(root, steps, horizon_remaining)
 
     return steps
@@ -464,3 +501,47 @@ def teach(adversary: LanguageModel, defender: LanguageModel,
                    new_utterance_ast)
 
     return step, reward(step)
+
+
+### evaluate sparse sample method and OG method -> should output exact same number of steps and same order, just different rewards
+
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from convokit import Corpus, download, Conversation
+from lm import LanguageModel
+from toxicity.detoxify_reddit import filter_corpus_toxicity, jsonl_to_dict
+from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance
+
+from environment import episode
+import torch
+import random
+
+# Load GPT-2 model and tokenizer for the defender
+checkpoint = "/home/allie11/ASTPrompter/models/train_roll2_best"
+model = AutoModelForCausalLM.from_pretrained(checkpoint)
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+test = LanguageModel(dont_init=True)
+test.model = model
+test.tokenizer = tokenizer
+
+
+# Example prompt for testing the defender
+example_prompt = ["This is the beginning of a conversation."]
+
+# Define the prompt
+prompt = ["This is the start of a conversation."]
+
+# # Call the episode_paired function
+# print("Results from episode_paired:")
+# steps_paired = episode_paired(test, test, prompt, horizon_remaining=3)
+# for step in steps_paired:
+#     print(step)
+# print("length of steps in OG:", len(steps_paired))
+
+# Call the episode_paired_sparseSample function
+print("\nResults from episode_paired_sparseSample:")
+steps_sparse_sample = episode_paired_sparseSample(test, test, prompt, horizon_remaining=3)
+for step in steps_sparse_sample:
+    print(step)
+# for reward in rewards:
+#     print(reward)
+print("length of steps in sparse method:", len(steps_sparse_sample))
