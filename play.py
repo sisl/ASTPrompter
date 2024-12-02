@@ -8,7 +8,10 @@ from environment import episode
 import torch
 import random
 
-checkpoint = "./models/TL_v_TL_beta_1e-1_best"
+# first model - horizon = 3, gamma = 0.9, beta = 10
+checkpoint = "/home/allie11/ASTPrompter/models/origModel_best"
+# second model - horizon = 3, gamma = 0.5, beta = 10
+#checkpoint = "/home/allie11/ASTPrompter/models/roll_gamma_0.5_best"
 # checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-16000"
 # checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-500"
 base = "TinyLlama/TinyLlama_v1.1"

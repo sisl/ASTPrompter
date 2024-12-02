@@ -216,11 +216,18 @@ if __name__ == "__main__":
                     # bar.update(1)
                 else:
                     try:
+                        # debug step
+                        logger.debug(f"Training prompt: {R.choice(train_prompts)}")
+
                         step = trainer.play(R.choice(train_prompts))
                         # bar.update(len(step))
                         steps += step
-                    except RuntimeError:
+                    except RuntimeError as e:
+                        logger.error(f"Error in trainer.play(): {e}")
                         continue
+
+                    # except RuntimeError:
+                    #     continue
             logger.debug(f"COLLECTED {len(steps)} >= {args.experience_size} steps...")
 
         logger.info(f"{len(steps)} STEPS will be ran in epoch {epoch}...")
@@ -241,6 +248,7 @@ if __name__ == "__main__":
 
     if trainer.global_step_counter_ > args.total_steps:
         logger.info(f"TRAINING STOPPED at {epoch} epochs. Bye!")
+        
 
     logger.info(f"EVALUATING...")
     rewards = []

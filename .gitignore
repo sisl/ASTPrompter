@@ -2,3 +2,6 @@
 /__pycache__/
 data
 /toxicity/__pycache__/
+models
+results
+wandb
