@@ -76,7 +76,7 @@ class Trainer:
 
         if "gpt2" in args.defense:
             self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
-            self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_tooken_id
+            self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
         if "gpt2" in args.baseline:
             self.baseline.tokenizer.pad_token = self.baseline.tokenizer.eos_token
