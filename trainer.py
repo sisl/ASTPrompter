@@ -44,23 +44,43 @@ class Trainer:
         self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
-        # our defender can be initialized normally 
-        # and immeditaley frozen
-        self.defender = LanguageModel(args.defense,
-                                      model_load_params=kwargs.get("model_load_params", {}))
-        self.defender.model.eval()
-        self.baseline = LanguageModel(args.baseline,
-                                      model_load_params=kwargs.get("model_load_params", {}))
-        self.baseline.model.eval()
+        if args.defense == args.baseline:
+            # freeze a copy of the model and initialize both defense and train with it to save space
+            frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
+            frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
+            self.defender = LanguageModel(dont_init=True)
+            self.defender.model = frozen_model
+            self.defender.tokenizer = frozen_tokenizer
+
+            self.baseline = LanguageModel(dont_init=True)
+            self.baseline.model = frozen_model
+            self.baseline.tokenizer = frozen_tokenizer
+
+            self.defender.model.eval()
+            self.baseline.model.eval()
+        else:
+            # our defender can be initialized normally 
+            # and immeditaley frozen
+            self.defender = LanguageModel(args.defense,
+                                        model_load_params=kwargs.get("model_load_params", {}))
+            self.defender.model.eval()
+            self.baseline = LanguageModel(args.baseline,
+                                        model_load_params=kwargs.get("model_load_params", {}))
+            self.baseline.model.eval()
 
         # GPT 2 doesn't have a padding token, so we add it
-        self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
-        self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
-        self.baseline.tokenizer.pad_token = self.baseline.tokenizer.eos_token
-        self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
-        self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
-        self.baseline.tokenizer.pad_token_id = self.baseline.tokenizer.eos_token_id
+        if "gpt2" in args.adversary:
+            self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
+            self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
+
+        if "gpt2" in args.defense:
+            self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
+            self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_tooken_id
+
+        if "gpt2" in args.baseline:
+            self.baseline.tokenizer.pad_token = self.baseline.tokenizer.eos_token
+            self.baseline.tokenizer.pad_token_id = self.baseline.tokenizer.eos_token_id
 
         # all the mishmash to get
         self.beta = args.beta
