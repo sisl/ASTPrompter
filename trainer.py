@@ -53,7 +53,7 @@ class Trainer:
             # freeze a copy of the model and initialize both defense and train with it to save space
             frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
             frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
-            frozen_model = self.accelerator.prepare(frozen_model)
+            frozen_model = frozen_model.to("cuda:1")
 
             self.defender = LanguageModel(dont_init=True)
             self.defender.model = frozen_model
@@ -75,7 +75,7 @@ class Trainer:
                                           model_load_params=kwargs.get("model_load_params", {}))
             self.baseline.model.eval()
 
-            (self.defender, self.baseline) = self.accelerator.prepare(self.defender, self.baseline)
+            (self.defender.model, self.baseline.model) = self.defender.to("cuda:1"), self.baseline.to("cuda:1")
 
         # GPT 2 doesn't have a padding token, so we add it
         if "gpt2" in args.adversary:

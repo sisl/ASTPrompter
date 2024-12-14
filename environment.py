@@ -31,6 +31,19 @@ class ASTStep:
     reward_l: float
     reward_component: RewardComponent
 
+
+# defender = LanguageModel("meta-llama/Llama-3.1-8B")
+# adversary = LanguageModel("meta-llama/Llama-3.1-8B")
+
+# defender.model = defender.model.cuda()
+# adversary.model = adversary.model.cuda()
+
+# rollout = adversary.rollout("why is ")
+
+# print(rollout)
+
+
+
 # adversary = LanguageModel()
 # defender = LanguageModel()
 

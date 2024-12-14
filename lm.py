@@ -75,8 +75,13 @@ class LanguageModel(object):
         crit = None
         if stop_sequence:
             crit = EosListStoppingCriteria(stop_sequence)
-        model_inputs = self.tokenizer([prompt], return_tensors="pt", 
-                max_length=950, truncation=True).to(self.device)
+        if isinstance(prompt, str):
+            model_inputs = self.tokenizer([prompt], return_tensors="pt", 
+                                          max_length=950, truncation=True).to(self.device)
+        else:
+            model_inputs = self.tokenizer(prompt, return_tensors="pt", 
+                                          max_length=950, truncation=True).to(self.device)
+
         # if we are using DDP, the model sits in a wrapper object which we have
         # to untangle before generate
         underlying = self.model
@@ -99,7 +104,10 @@ class LanguageModel(object):
 
         print("RO out")
 
-        return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=skip_special_tokens)[0]
+        if isinstance(prompt, str):
+            return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=skip_special_tokens)[0]
+        else:
+            return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=skip_special_tokens)
 
     @property
     def device(self):
