@@ -46,7 +46,7 @@ class Trainer:
 
         if args.defense == args.baseline:
             # freeze a copy of the model and initialize both defense and train with it to save space
-            frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
+            frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {})).to(self.device)
             frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
             self.defender = LanguageModel(dont_init=True)
@@ -66,8 +66,10 @@ class Trainer:
                                         model_load_params=kwargs.get("model_load_params", {}))
             self.defender.model.eval()
             self.baseline = LanguageModel(args.baseline,
-                                        model_load_params=kwargs.get("model_load_params", {}))
+                                          model_load_params=kwargs.get("model_load_params", {}))
             self.baseline.model.eval()
+            (self.defender.model, self.baseline.model) = (self.defender.model.to(self.device),
+                                                          self.baseline.model.to(self.device))
 
         # GPT 2 doesn't have a padding token, so we add it
         if "gpt2" in args.adversary:
@@ -87,11 +89,13 @@ class Trainer:
         optimizer = AdamW(self.adversary.model.parameters(), lr=args.lr)
         scheduler = LambdaLR(optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / (args.warmup_steps + 1)))
 
+
         # because the accelerator may move models to weird places, we 
         # account for that
-        (self.adversary.model, self.defender.model,
-         self.baseline.model, self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model, self.defender.model,
-                                                                                         self.baseline.model, optimizer, scheduler)
+        (self.adversary.model,
+         self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model,
+                                                                    optimizer, scheduler)
+
         if args.wandb:
             wandb.watch(self.adversary.model)
 
@@ -102,6 +106,10 @@ class Trainer:
         self.args = args
 
         self.global_step_counter_ = 0
+
+    @property
+    def device(self):
+        return self.accelerator.device
 
     @classmethod
     def warm_start(cls, args, state_path, **kwargs):
