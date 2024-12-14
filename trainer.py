@@ -1,6 +1,7 @@
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
+from accelerate.state import AcceleratorState
 from accelerate.utils.tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.optim.lr_scheduler import LambdaLR
@@ -28,6 +29,8 @@ class Trainer:
         # initialize early the accelator
         self.accelerator = Accelerator(**kwargs.get("accelerator_kwargs", {}),
                                        log_with="wandb" if args.wandb else None)
+        AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.batch_size
+
         if args.wandb:
             self.accelerator.init_trackers(
                 project_name="ast", 
