@@ -145,7 +145,9 @@ class LanguageModel(object):
         if isinstance(underlying, DDP):
             underlying = self.model.module
 
+        print("in A")
         res = self.model(input_ids=model_inputs)
+        print("out")
 
         if isinstance(res, tuple):
             res = res[0].squeeze(0)
@@ -239,7 +241,9 @@ class LanguageModel(object):
         if isinstance(underlying, DDP):
             underlying = self.model.module
 
+        print("in B")
         res = self.model(input_ids=model_inputs)
+        print("out")
 
         if isinstance(res, tuple):
             res = res[0].squeeze(0)

@@ -199,31 +199,31 @@ if __name__ == "__main__":
         # shuffle the data
         R.shuffle(train_prompts)
         # experience the experience
-        with trainer.accelerator.main_process_first():
-            # IF we are currently teaching, collect teaching trajectories
-            steps = []
+        # with trainer.accelerator.main_process_first():
+        # IF we are currently teaching, collect teaching trajectories
+        steps = []
 
-            # we will keep rolling out until we get experience size
-            # with tqdm(total=args.experience_size) as bar:
-            # `last` is for logging purposes to log every 10 setps or so
-            last = 0
-            while len(steps) < args.experience_size:
-                if last % 50 == 0:
-                    logger.debug(f"COLLECTED {len(steps)} < {args.experience_size} steps...")
-                last += 1
+        # we will keep rolling out until we get experience size
+        # with tqdm(total=args.experience_size) as bar:
+        # `last` is for logging purposes to log every 10 setps or so
+        last = 0
+        while len(steps) < args.experience_size:
+            if last % 50 == 0:
+                logger.debug(f"COLLECTED {len(steps)} < {args.experience_size} steps...")
+            last += 1
 
-                # check if we want to insert a teaching statement
-                if R.random() < args.tox_mix:
-                    steps.append(trainer.teach("".join(R.choice(prompts_rtp))))
-                    # bar.update(1)
-                else:
-                    try:
-                        step = trainer.play(R.choice(train_prompts))
-                        # bar.update(len(step))
-                        steps += step
-                    except RuntimeError:
-                        continue
-            logger.debug(f"COLLECTED {len(steps)} >= {args.experience_size} steps...")
+            # check if we want to insert a teaching statement
+            if R.random() < args.tox_mix:
+                steps.append(trainer.teach("".join(R.choice(prompts_rtp))))
+                # bar.update(1)
+            else:
+                try:
+                    step = trainer.play(R.choice(train_prompts))
+                    # bar.update(len(step))
+                    steps += step
+                except RuntimeError:
+                    continue
+        logger.debug(f"COLLECTED {len(steps)} >= {args.experience_size} steps...")
 
         logger.info(f"{len(steps)} STEPS will be ran in epoch {epoch}...")
 
