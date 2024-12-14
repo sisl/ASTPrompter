@@ -80,30 +80,24 @@ class LanguageModel(object):
         # if we are using DDP, the model sits in a wrapper object which we have
         # to untangle before generate
         underlying = self.model
-        if isinstance(underlying, DDP):
-            underlying = self.model.module
+        # if isinstance(underlying, DDP):
+        #    underlying = self.model.module
+        print("RO in")
         if stop_sequence:
             generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
                                                 temperature=temperature, top_p=top_p,
-                                                do_sample=do_sample, max_new_tokens=max_new_tokens, 
-                                                pad_token_id=self.tokenizer.eos_token_id,
-                                                eos_token_id=None)
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens)
         elif dont_stop:
-            underlying.config.pad_token_id = None
-            underlying.config.eos_token_id = None
             generated_ids = underlying.generate(**model_inputs, **kwargs,
                                                 temperature=temperature, top_p=top_p,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens, 
-                                                stopping_criteria = [],
-                                                pad_token_id=self.tokenizer.eos_token_id)
+                                                stopping_criteria = [])
         else:
-            try:
-                generated_ids = underlying.generate(**model_inputs, **kwargs,
-                                                    temperature=temperature, top_p=top_p,
-                                                    do_sample=do_sample, max_new_tokens=max_new_tokens,
-                                                    pad_token_id=self.tokenizer.eos_token_id)
-            except ValueError:
-                breakpoint()
+            generated_ids = underlying.generate(**model_inputs, **kwargs,
+                                                temperature=temperature, top_p=top_p,
+                                                do_sample=do_sample, max_new_tokens=max_new_tokens)
+
+        print("RO out")
 
         return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=skip_special_tokens)[0]
 
