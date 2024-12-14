@@ -54,7 +54,7 @@ class Trainer:
             frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
             if args.deepspeed:
-                (frozen_model,) = self.accelerator._prepare_deepspeed(frozen_model)
+                (frozen_model,) = self.accelerator.prepare(frozen_model)
             else:
                 frozen_model = frozen_model.to(self.device)
 
@@ -79,7 +79,7 @@ class Trainer:
             self.baseline.model.eval()
 
             if args.deepspeed:
-                (self.defender, self.baseline) = self.accelerator._prepare_deepspeed(self.defender, self.baseline)
+                (self.defender, self.baseline) = self.accelerator.prepare(self.defender, self.baseline)
             else:
                 self.defender = self.defender.to(self.device)
                 self.baseline = self.baseline.to(self.device)
