@@ -29,6 +29,7 @@ class Trainer:
         # initialize early the accelator
         self.accelerator = Accelerator(**kwargs.get("accelerator_kwargs", {}),
                                        log_with="wandb" if args.wandb else None)
+
         if args.deepspeed:
             AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.batch_size
 
@@ -52,11 +53,7 @@ class Trainer:
             # freeze a copy of the model and initialize both defense and train with it to save space
             frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
             frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
-
-            if args.deepspeed:
-                frozen_model = self.accelerator.prepare(frozen_model)
-            else:
-                frozen_model = frozen_model.to(self.device)
+            frozen_model = self.accelerator.prepare(frozen_model)
 
             self.defender = LanguageModel(dont_init=True)
             self.defender.model = frozen_model
@@ -78,11 +75,7 @@ class Trainer:
                                           model_load_params=kwargs.get("model_load_params", {}))
             self.baseline.model.eval()
 
-            if args.deepspeed:
-                (self.defender, self.baseline) = self.accelerator.prepare(self.defender, self.baseline)
-            else:
-                self.defender = self.defender.to(self.device)
-                self.baseline = self.baseline.to(self.device)
+            (self.defender, self.baseline) = self.accelerator.prepare(self.defender, self.baseline)
 
         # GPT 2 doesn't have a padding token, so we add it
         if "gpt2" in args.adversary:
