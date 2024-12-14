@@ -160,7 +160,8 @@ class Trainer:
         trainer.global_step_counter_ = state["steps"]
 
         actual_models = trainer.accelerator._models
-        trainer.accelerator._models = [model for model in acc_models if model.checkpoint_engine is not None]
+        trainer.accelerator._models = [model for model in actual_models
+                                       if model.checkpoint_engine is not None]
         trainer.accelerator.load_state(state_path)
         trainer.accelerator._models = actual_models
 
@@ -190,7 +191,8 @@ class Trainer:
             # the frozen models through prepare, accelerate is really angry about it
             # during save because it tries to save nonexistant models
             actual_models = self.accelerator._models
-            self.accelerator._models = [model for model in acc_models if model.checkpoint_engine is not None]
+            self.accelerator._models = [model for model in actual_models
+                                        if model.checkpoint_engine is not None]
             self.accelerator.save_state(savedir, safe_serialization=False)
             self.accelerator._models = actual_models
 
