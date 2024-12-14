@@ -160,11 +160,13 @@ class Trainer:
         trainer = cls(args, **kwargs)
         trainer.global_step_counter_ = state["steps"]
 
-        actual_models = trainer.accelerator._models
-        trainer.accelerator._models = [model for model in actual_models
-                                       if model.checkpoint_engine is not None]
+        if args.deepspeed:
+            actual_models = trainer.accelerator._models
+            trainer.accelerator._models = [model for model in actual_models
+                                        if model.checkpoint_engine is not None]
         trainer.accelerator.load_state(state_path)
-        trainer.accelerator._models = actual_models
+        if args.deepspeed:
+            trainer.accelerator._models = actual_models
 
         return trainer, dict(state["train_state"])
    
@@ -191,11 +193,13 @@ class Trainer:
             # we do this weird save because if we don't actually initalize
             # the frozen models through prepare, accelerate is really angry about it
             # during save because it tries to save nonexistant models
-            actual_models = self.accelerator._models
-            self.accelerator._models = [model for model in actual_models
-                                        if model.checkpoint_engine is not None]
+            if self.args.deepspeed:
+                actual_models = self.accelerator._models
+                self.accelerator._models = [model for model in actual_models
+                                            if model.checkpoint_engine is not None]
             self.accelerator.save_state(savedir, safe_serialization=False)
-            self.accelerator._models = actual_models
+            if self.args.deepspeed:
+                self.accelerator._models = actual_models
 
             with open(os.path.join(savedir, "meta.json"), 'w') as df:
                 json.dump({
