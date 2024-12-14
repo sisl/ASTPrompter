@@ -52,7 +52,7 @@ class Trainer:
             frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
             frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
-            if args.use_deepspeed:
+            if args.deepspeed:
                 frozen_model = self.accelerator._prepare_deepspeed(frozen_model)
             else:
                 frozen_model = frozen_model.to(self.device)
@@ -77,7 +77,7 @@ class Trainer:
                                           model_load_params=kwargs.get("model_load_params", {}))
             self.baseline.model.eval()
 
-            if args.use_deepspeed:
+            if args.deepspeed:
                 self.defender = self.accelerator._prepare_deepspeed(self.defender)
                 self.baseline = self.accelerator._prepare_deepspeed(self.baseline)
             else:
