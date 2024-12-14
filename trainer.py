@@ -325,16 +325,16 @@ class Trainer:
         # we need to individualy calculate the logprobs of wins and loses
         # for both our adversarial model + defender model
         with torch.inference_mode():
-            defender_logprobs_win = self.baseline.logprob_batched(combined_wins, self.accelerator.device)
-            defender_logprobs_loss = self.baseline.logprob_batched(combined_loses, self.accelerator.device)
+            defender_logprobs_win = self.baseline.logprob_batched(combined_wins, "cuda:1")
+            defender_logprobs_loss = self.baseline.logprob_batched(combined_loses, "cuda:1")
         adversary_logprobs_win = self.adversary.logprob_batched(combined_wins, self.accelerator.device) 
         adversary_logprobs_loss = self.adversary.logprob_batched(combined_loses, self.accelerator.device) 
 
         # yipee
-        loses, chosen_rewards, rejected_rewards = self.__loss(adversary_logprobs_win,
-                                                              adversary_logprobs_loss,
-                                                              defender_logprobs_win,
-                                                              defender_logprobs_loss)
+        loses, chosen_rewards, rejected_rewards = self.__loss(adversary_logprobs_win.to(self.accelerator.device),
+                                                              adversary_logprobs_loss.to(self.accelerator.device),
+                                                              defender_logprobs_win.to(self.accelerator.device),
+                                                              defender_logprobs_loss.to(self.accelerator.device))
         reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
         if torch.isnan(loses.mean()):

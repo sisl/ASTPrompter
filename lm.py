@@ -87,22 +87,25 @@ class LanguageModel(object):
         underlying = self.model
         # if isinstance(underlying, DDP):
         #    underlying = self.model.module
-        print("RO in")
+        # to avoid "Setting `pad_token_id` to `eos_token_id`:128001 for open-end generation"
+        # we set pad_token_id to eos_token_id
         if stop_sequence:
             generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
                                                 temperature=temperature, top_p=top_p,
+                                                pad_token_id=self.tokenizer.eos_token_id,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens)
         elif dont_stop:
             generated_ids = underlying.generate(**model_inputs, **kwargs,
                                                 temperature=temperature, top_p=top_p,
+                                                pad_token_id=self.tokenizer.eos_token_id,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens, 
                                                 stopping_criteria = [])
         else:
             generated_ids = underlying.generate(**model_inputs, **kwargs,
                                                 temperature=temperature, top_p=top_p,
+                                                pad_token_id=self.tokenizer.eos_token_id,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens)
 
-        print("RO out")
 
         if isinstance(prompt, str):
             return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=skip_special_tokens)[0]
@@ -147,9 +150,7 @@ class LanguageModel(object):
         if isinstance(underlying, DDP):
             underlying = self.model.module
 
-        print("in A")
         res = self.model(input_ids=model_inputs)
-        print("out")
 
         if isinstance(res, tuple):
             res = res[0].squeeze(0)
@@ -243,9 +244,7 @@ class LanguageModel(object):
         if isinstance(underlying, DDP):
             underlying = self.model.module
 
-        print("in B")
         res = self.model(input_ids=model_inputs)
-        print("out")
 
         if isinstance(res, tuple):
             res = res[0].squeeze(0)
