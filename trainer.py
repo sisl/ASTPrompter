@@ -49,8 +49,13 @@ class Trainer:
 
         if args.defense == args.baseline:
             # freeze a copy of the model and initialize both defense and train with it to save space
-            frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {})).to(self.device)
+            frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
             frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
+
+            if args.use_deepspeed:
+                frozen_model = self.accelerator._prepare_deepspeed(frozen_model)
+            else:
+                frozen_model = frozen_model.to(self.device)
 
             self.defender = LanguageModel(dont_init=True)
             self.defender.model = frozen_model
@@ -71,8 +76,13 @@ class Trainer:
             self.baseline = LanguageModel(args.baseline,
                                           model_load_params=kwargs.get("model_load_params", {}))
             self.baseline.model.eval()
-            (self.defender.model, self.baseline.model) = (self.defender.model.to(self.device),
-                                                          self.baseline.model.to(self.device))
+
+            if args.use_deepspeed:
+                self.defender = self.accelerator._prepare_deepspeed(self.defender)
+                self.baseline = self.accelerator._prepare_deepspeed(self.baseline)
+            else:
+                self.defender = self.defender.to(self.device)
+                self.baseline = self.baseline.to(self.device)
 
         # GPT 2 doesn't have a padding token, so we add it
         if "gpt2" in args.adversary:

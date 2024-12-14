@@ -120,6 +120,8 @@ if __name__ == "__main__":
                         help='start your model warm from this checkpoint')
     parser.add_argument('--wandb', action="store_true", default=False,
                         help='use wandb?')
+    parser.add_argument('--deepspeed', action="store_true", default=False,
+                        help='use deepspeed (there are some special config stuff)?')
     parser.add_argument('--dpo', action="store_true", default=False,
                         help='use dpo?')
     parser.add_argument('--label_smooth', type=float, default=0.1,
