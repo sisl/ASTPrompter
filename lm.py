@@ -83,18 +83,22 @@ class LanguageModel(object):
         # if isinstance(underlying, DDP):
         #    underlying = self.model.module
         print("RO in")
+        # we need to set 
         if stop_sequence:
             generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
                                                 temperature=temperature, top_p=top_p,
+                                                pad_token_id=self.tokenizer.eos_token_id,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens)
         elif dont_stop:
             generated_ids = underlying.generate(**model_inputs, **kwargs,
                                                 temperature=temperature, top_p=top_p,
+                                                pad_token_id=self.tokenizer.eos_token_id,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens, 
                                                 stopping_criteria = [])
         else:
             generated_ids = underlying.generate(**model_inputs, **kwargs,
                                                 temperature=temperature, top_p=top_p,
+                                                pad_token_id=self.tokenizer.eos_token_id,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens)
 
         print("RO out")
@@ -139,9 +143,7 @@ class LanguageModel(object):
         if isinstance(underlying, DDP):
             underlying = self.model.module
 
-        print("in A")
         res = self.model(input_ids=model_inputs)
-        print("out")
 
         if isinstance(res, tuple):
             res = res[0].squeeze(0)
@@ -235,9 +237,7 @@ class LanguageModel(object):
         if isinstance(underlying, DDP):
             underlying = self.model.module
 
-        print("in B")
         res = self.model(input_ids=model_inputs)
-        print("out")
 
         if isinstance(res, tuple):
             res = res[0].squeeze(0)
