@@ -73,6 +73,10 @@ with open("prompts.jsonl", 'r') as df:
 
 # fire this puppy off 
 if __name__ == "__main__":
+    # to prevent wandb from complaining
+    import wandb
+    wandb.init(mode='disabled')
+
     # set random seed for reproducability
     set_seed(24)
 
@@ -142,7 +146,7 @@ if __name__ == "__main__":
                             "wandb": {
                                 # "entity": "jemoka", 
                                 "mode": None if args.wandb else "disabled",
-                                # "name": args.save_name
+                                "name": args.save_name
                             }
                         },
                         model_load_params={
