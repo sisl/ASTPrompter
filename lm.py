@@ -90,7 +90,7 @@ class LanguageModel(object):
         underlying = self.model
         # if isinstance(underlying, DDP):
         #    underlying = self.model.module
-        print("RO in")
+        # print("RO in")
         # we need to set 
         if stop_sequence:
             generated_ids = underlying.generate(**model_inputs, **kwargs, stopping_criteria = [crit],
@@ -109,7 +109,7 @@ class LanguageModel(object):
                                                 pad_token_id=self.tokenizer.eos_token_id,
                                                 do_sample=do_sample, max_new_tokens=max_new_tokens)
 
-        print("RO out")
+        # print("RO out")
 
         if isinstance(prompt, str):
             return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=skip_special_tokens)[0]

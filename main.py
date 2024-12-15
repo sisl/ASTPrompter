@@ -214,11 +214,15 @@ if __name__ == "__main__":
 
             # check if we want to insert a teaching statement
             if R.random() < args.tox_mix:
+                print("TEACHING")
                 steps.append(trainer.teach("".join(R.choice(prompts_rtp))))
+                print("DONE")
                 # bar.update(1)
             else:
                 try:
+                    print("PLAYING")
                     step = trainer.play(R.choice(train_prompts))
+                    print("DONE, GOT", len(step))
                     # bar.update(len(step))
                     steps += step
                 except RuntimeError:
