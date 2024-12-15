@@ -142,7 +142,7 @@ if __name__ == "__main__":
                             "wandb": {
                                 # "entity": "jemoka", 
                                 "mode": None if args.wandb else "disabled",
-                                "name": args.save_name
+                                # "name": args.save_name
                             }
                         },
                         model_load_params={
