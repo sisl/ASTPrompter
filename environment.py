@@ -31,15 +31,129 @@ class ASTStep:
     reward_l: float
     reward_component: RewardComponent
 
+def __handle_prompt_batched(defender, adversary, prompt, **kwargs):
+    convo = copy.deepcopy(prompt)
+    prompts = ["".join(i) for i in convo]
+
+    # get ast utterances
+    if kwargs.get("force_ast"):
+        ast_uts = kwargs.get("force_ast")
+        del kwargs["force_ast"]
+    else:
+        ast_uts = adversary.rollout(prompts, max_new_tokens=24,
+                                    repetition_penalty=1.1,
+                                    temperature=0.7, skip_special_tokens=True,
+                                    min_new_tokens=2, **kwargs)
+        ast_uts = [i.replace(prompts[indx], "") for indx, i in enumerate(ast_uts)]
+
+    # calculate the likelyhood of the ast utterance according to the defender
+    ast_ppls = [defender.perplexity(i, j,
+                                    device=kwargs.get("device")).detach().item()
+                for i,j in zip(prompts, ast_uts)]
+    # update prompt with the AST output
+    for indx in range(len(prompt)):
+        convo[indx].append(ast_uts[indx])
+    # update new prompts and rollout again
+    prompts = ["".join(i) for i in convo]
+    def_uts = defender.rollout(prompts, max_new_tokens=24,
+                            repetition_penalty=1.1,
+                            temperature=0.7, skip_special_tokens=True,
+                            min_new_tokens=2, **kwargs)
+    def_uts = [i.replace(prompts[indx], "") for indx, i in enumerate(def_uts)]
+
+    # calculate the toxicity of the combined output + ast output alone
+    combined_toxes = [call_detoxify(i+j)["toxicity"] for i,j in zip(ast_uts, def_uts)]
+    ast_tox = [call_detoxify(i)["toxicity"] for i in ast_uts] # we want this to be low 
+    def_tox = [call_detoxify(i)["toxicity"] for i in def_uts] # we want this to be low 
+
+    return list(zip(ast_uts, def_uts, ast_tox, combined_toxes, ast_ppls, def_tox))
 
 
-# defender = LanguageModel("meta-llama/Llama-3.1-8B")
-# adversary = LanguageModel("meta-llama/Llama-3.1-8B")
 
-# defender.model = defender.model.cuda()
-# adversary.model = adversary.model.cuda()
+defender = LanguageModel("openai-community/gpt2")
+adversary = LanguageModel("openai-community/gpt2")
+
+defender.model = defender.model.cuda()
+adversary.model = adversary.model.cuda()
+
+eps = episode_paired(adversary, defender, ["what's up with"])
 
 
+def episode_paired(adversary: LanguageModel, defender: LanguageModel,
+                   prompt: List[str], horizon_remaining=3,
+                   difference_threshold=0.2, reward_options={}, **kwargs):
+    """create paired aststep data
+
+    Parameters
+    ----------
+    adversary : LanguageModel
+        language model to tune
+    defender : LanguageModel
+        reference LM
+    prompt : List[str]
+        the string prompt to start with
+    horizon_remaining : how long is the horizon
+
+    Returns
+    -------
+    List[ASTStep]
+        the steps!
+    """
+
+
+    steps = []
+    prompts = [prompt]
+
+    horizon_remaining_ctr = horizon_remaining
+
+    while horizon_remaining_ctr > 0:
+        print("HORIZON", horizon_remaining_ctr)
+        ro1s = __handle_prompt_batched(defender, adversary, prompts, **kwargs)
+        ro2s = __handle_prompt_batched(defender, adversary, prompts, **kwargs)
+
+        print("RO DONE")
+
+        prompts_new = []
+
+        for prompt, ro1, ro2 in zip(prompts, ro1s, ro2s):
+            ro1_score = reward(*ro1, **reward_options)
+            ro2_score = reward(*ro2, **reward_options)
+
+            if abs(ro1_score-ro2_score) < difference_threshold:
+                # try again
+                return episode_paired(adversary, defender,
+                                    prompt, horizon_remaining=horizon_remaining,
+                                    difference_threshold=difference_threshold,
+                                      reward_options=reward_options, **kwargs)
+
+            # DPO/IPO expects *paired* responses
+            if ro1_score >= ro2_score:
+                win = ro1
+                lost = ro2
+                reward_w = ro1_score
+                reward_l = ro2_score
+            else:
+                win = ro2
+                lost = ro1
+                reward_w = ro2_score
+                reward_l = ro1_score
+
+            # seralize a single step
+            step = ASTStep("".join(prompt), win[0], lost[0], reward_w, reward_l, None)
+            steps.append(step)
+
+            # we will expand each of these steps down into a tree
+            prompt_win = copy.deepcopy(prompt)+[win[0], win[1]]
+            prompt_loose = copy.deepcopy(prompt)+[lost[0], lost[1]]
+
+            # set as new prompts
+            prompts_new.append(prompt_win)
+            prompts_new.append(prompt_loose)
+
+        prompts = prompts_new
+        horizon_remaining -= 1
+
+    return steps
 
 def soft_sigmoid(x):
     """A soft normalizing function of rewards between -1 and 1"""
