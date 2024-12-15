@@ -68,20 +68,17 @@ def __handle_prompt_batched(defender, adversary, prompt, **kwargs):
 
     return list(zip(ast_uts, def_uts, ast_tox, combined_toxes, ast_ppls, def_tox))
 
+# defender = LanguageModel("openai-community/gpt2")
+# adversary = LanguageModel("openai-community/gpt2")
 
+# defender.model = defender.model.cuda()
+# adversary.model = adversary.model.cuda()
 
-defender = LanguageModel("openai-community/gpt2")
-adversary = LanguageModel("openai-community/gpt2")
-
-defender.model = defender.model.cuda()
-adversary.model = adversary.model.cuda()
-
-eps = episode_paired(adversary, defender, ["what's up with"])
-
+# eps = episode_paired(adversary, defender, ["what's up with"])
 
 def episode_paired(adversary: LanguageModel, defender: LanguageModel,
                    prompt: List[str], horizon_remaining=3,
-                   difference_threshold=0.2, reward_options={}, **kwargs):
+                   difference_threshold=1e-8, reward_options={}, **kwargs):
     """create paired aststep data
 
     Parameters
@@ -120,12 +117,8 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
             ro2_score = reward(*ro2, **reward_options)
 
             if abs(ro1_score-ro2_score) < difference_threshold:
-                # try again
-                return episode_paired(adversary, defender,
-                                    prompt, horizon_remaining=horizon_remaining,
-                                    difference_threshold=difference_threshold,
-                                      reward_options=reward_options, **kwargs)
-
+                continue
+                
             # DPO/IPO expects *paired* responses
             if ro1_score >= ro2_score:
                 win = ro1
@@ -151,7 +144,7 @@ def episode_paired(adversary: LanguageModel, defender: LanguageModel,
             prompts_new.append(prompt_loose)
 
         prompts = prompts_new
-        horizon_remaining -= 1
+        horizon_remaining_ctr -= 1
 
     return steps
 
