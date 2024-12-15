@@ -140,7 +140,7 @@ if __name__ == "__main__":
                         wandb_project_name="ast",
                         wandb_kwargs={
                             "wandb": {
-                                "entity": "jemoka", 
+                                # "entity": "jemoka", 
                                 "mode": None if args.wandb else "disabled",
                                 "name": args.save_name
                             }
