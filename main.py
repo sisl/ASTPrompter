@@ -80,7 +80,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='AST Trainer')
     parser.add_argument('--epochs', type=int, default=100000,
                         help='number of epochs to train')
-    parser.add_argument('--batch_size', type=int, default=2,
+    parser.add_argument('--batch_size', type=int, default=1,
                         help='each batch will be batch_size*accumulate_steps')
     parser.add_argument('--horizon', type=int, default=3,
                         help='how many turns to self-play')
@@ -88,13 +88,13 @@ if __name__ == "__main__":
                         help='for how many EPISODES do we mix in a single toxicity prompt?')
     parser.add_argument('--threshold', type=float, default=0,
                         help='how different does a pair have to be to count?')
-    parser.add_argument('--experience_size', type=int, default=128,
+    parser.add_argument('--experience_size', type=int, default=64,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=5e-7,
                         help='learning rate')
     parser.add_argument('--beta', type=float, default=0.01,
                         help='IPO/DPO beta')
-    parser.add_argument('--accumulate_steps', type=int, default=4,
+    parser.add_argument('--accumulate_steps', type=int, default=8,
                         help='gradient accumulation steps')
     parser.add_argument('--max_gradient_norm', type=float, default=10,
                         help='maximum gradient norm to clip to')
@@ -104,7 +104,7 @@ if __name__ == "__main__":
                         help='the weight on the perplexity term, higher means more likely')
     parser.add_argument('--eval_every', type=int, default=16,
                         help='evaluate model every this many epochs')
-    parser.add_argument('--total_steps', type=int, default=40000,
+    parser.add_argument('--total_steps', type=int, default=80000,
                         help='total steps to train')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
