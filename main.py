@@ -78,9 +78,9 @@ if __name__ == "__main__":
 
     # establish the arguments of this system
     parser = argparse.ArgumentParser(description='AST Trainer')
-    parser.add_argument('--epochs', type=int, default=10000,
+    parser.add_argument('--epochs', type=int, default=100000,
                         help='number of epochs to train')
-    parser.add_argument('--batch_size', type=int, default=8,
+    parser.add_argument('--batch_size', type=int, default=2,
                         help='each batch will be batch_size*accumulate_steps')
     parser.add_argument('--horizon', type=int, default=3,
                         help='how many turns to self-play')
@@ -94,7 +94,7 @@ if __name__ == "__main__":
                         help='learning rate')
     parser.add_argument('--beta', type=float, default=0.01,
                         help='IPO/DPO beta')
-    parser.add_argument('--accumulate_steps', type=int, default=1,
+    parser.add_argument('--accumulate_steps', type=int, default=4,
                         help='gradient accumulation steps')
     parser.add_argument('--max_gradient_norm', type=float, default=10,
                         help='maximum gradient norm to clip to')
@@ -104,7 +104,7 @@ if __name__ == "__main__":
                         help='the weight on the perplexity term, higher means more likely')
     parser.add_argument('--eval_every', type=int, default=16,
                         help='evaluate model every this many epochs')
-    parser.add_argument('--total_steps', type=int, default=10000,
+    parser.add_argument('--total_steps', type=int, default=40000,
                         help='total steps to train')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
