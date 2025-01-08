@@ -274,8 +274,6 @@ class Trainer:
                 self.accelerator.backward(loss)
 
             if (i % self.args.accumulate_steps) == 0:
-                gn = clip_grad_norm_(self.adversary.model.parameters(), self.args.max_gradient_norm).cpu().item()
-                metrics["training/gradient_norm"] = gn
                 self.optimizer.step()
                 self.scheduler.step()
                 self.optimizer.zero_grad()
@@ -332,10 +330,10 @@ class Trainer:
         adversary_logprobs_loss = self.adversary.logprob_batched(combined_loses, self.accelerator.device) 
 
         # yipee
-        loses, chosen_rewards, rejected_rewards = self.__loss(adversary_logprobs_win.to(self.accelerator.device),
-                                                              adversary_logprobs_loss.to(self.accelerator.device),
-                                                              defender_logprobs_win.to(self.accelerator.device),
-                                                              defender_logprobs_loss.to(self.accelerator.device))
+        loses, chosen_rewards, rejected_rewards = self.__loss(adversary_logprobs_win.to("cuda:1"),
+                                                              adversary_logprobs_loss.to("cuda:1"),
+                                                              defender_logprobs_win.to("cuda:1"),
+                                                              defender_logprobs_loss.to("cuda:1"))
         reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
         if torch.isnan(loses.mean()):
@@ -355,7 +353,7 @@ class Trainer:
                 columns=["chosen", "rejected"])
         }
 
-        return loses.mean(), metrics
+        return loses.mean().to(self.accelerator.device), metrics
 
 #         combined_wins, combined_loses
 
