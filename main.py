@@ -185,7 +185,7 @@ if __name__ == "__main__":
             rewards = []
             for indx, i in enumerate(dev_prompts):
                 if indx % 30 == 0:
-                    logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
+                    logger.debug(f"EVAULATED {indx}/{min(len(dev_prompts), 60)} steps...")
                 rewards += [j.reward_w for j in trainer.episode(i)]
                 if indx >= 60:
                     break
