@@ -88,7 +88,7 @@ if __name__ == "__main__":
                         help='for how many EPISODES do we mix in a single toxicity prompt?')
     parser.add_argument('--threshold', type=float, default=0,
                         help='how different does a pair have to be to count?')
-    parser.add_argument('--experience_size', type=int, default=512,
+    parser.add_argument('--experience_size', type=int, default=128,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=5e-7,
                         help='learning rate')
@@ -102,7 +102,7 @@ if __name__ == "__main__":
                         help='number of warmup steps')
     parser.add_argument('--ast_ppl_weight', type=float, default=0.1,
                         help='the weight on the perplexity term, higher means more likely')
-    parser.add_argument('--eval_every', type=int, default=10,
+    parser.add_argument('--eval_every', type=int, default=16,
                         help='evaluate model every this many epochs')
     parser.add_argument('--total_steps', type=int, default=10000,
                         help='total steps to train')
@@ -178,10 +178,10 @@ if __name__ == "__main__":
     best_score = meta.get("best", float("-inf"))
     while epoch < args.epochs:
         logger.info(f"EPOCH {epoch} starting...")
-        trainer.save("checkpoint", {"epoch": epoch, "best": best_score})
 
-        if epoch % args.eval_every == 0 and epoch != 0:
+        if epoch % args.eval_every == 0:
             logger.info(f"EVALUATING...")
+            trainer.save("checkpoint", {"epoch": epoch, "best": best_score})
             rewards = []
             for indx, i in enumerate(dev_prompts):
                 if indx % 30 == 0:
