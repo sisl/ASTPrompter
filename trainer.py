@@ -47,6 +47,7 @@ class Trainer:
 
         self.adversary = LanguageModel(dont_init=True)
         self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
+        self.adversary.model.gradient_checkpointing_enable()
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
         if args.defense == args.baseline:
