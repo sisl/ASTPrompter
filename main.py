@@ -187,6 +187,8 @@ if __name__ == "__main__":
                 if indx % 30 == 0:
                     logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
                 rewards += [j.reward_w for j in trainer.episode(i)]
+                if indx >= 60:
+                    break
             logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
             dev_score = sum(rewards)/len(rewards)
 
