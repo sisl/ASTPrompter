@@ -16,6 +16,7 @@ import os
 import wandb
 import json
 from accelerate.state import PartialState
+from torch.cuda.amp import autocast
 
 logger = get_logger("ast")
 
@@ -46,13 +47,13 @@ class Trainer:
         # just use it in our inference wrapper
 
         self.adversary = LanguageModel(dont_init=True)
-        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
+        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}), torch_dtype=torch.bfloat16)
         self.adversary.model.gradient_checkpointing_enable()
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
         if args.defense == args.baseline:
             # freeze a copy of the model and initialize both defense and train with it to save space
-            frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
+            frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}), torch_dtype=torch.bfloat16)
             frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
             frozen_model = frozen_model.to("cuda:1")
 
@@ -70,10 +71,12 @@ class Trainer:
             # our defender can be initialized normally 
             # and immeditaley frozen
             self.defender = LanguageModel(args.defense,
-                                        model_load_params=kwargs.get("model_load_params", {}))
+                                          model_load_params=kwargs.get("model_load_params", {}),
+                                          torch_dtype=torch.bfloat16)
             self.defender.model.eval()
             self.baseline = LanguageModel(args.baseline,
-                                          model_load_params=kwargs.get("model_load_params", {}))
+                                          model_load_params=kwargs.get("model_load_params", {}),
+                                          torch_dtype=torch.bfloat16)
             self.baseline.model.eval()
 
             (self.defender.model, self.baseline.model) = self.defender.to("cuda:1"), self.baseline.to("cuda:1")
@@ -267,23 +270,24 @@ class Trainer:
             how often to log to wandb
         """
         
-        for i, batch in enumerate(iter(dataloader)):
-            loss, metrics = self.step(batch, log=(i % log_every == 0))
-            loss = loss / self.args.accumulate_steps
-            if not torch.isnan(loss):
-                self.accelerator.backward(loss)
+        with autocast(dtype=torch.bfloat16):
+            for i, batch in enumerate(iter(dataloader)):
+                loss, metrics = self.step(batch, log=(i % log_every == 0))
+                loss = loss / self.args.accumulate_steps
+                if not torch.isnan(loss):
+                    self.accelerator.backward(loss)
 
-            if (i % self.args.accumulate_steps) == 0:
-                self.optimizer.step()
-                self.scheduler.step()
-                self.optimizer.zero_grad()
+                if (i % self.args.accumulate_steps) == 0:
+                    self.optimizer.step()
+                    self.scheduler.step()
+                    self.optimizer.zero_grad()
 
-            if (i % log_every == 0):
-                metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
-                self.accelerator.log(metrics, step=self.global_step_counter_)
-                logger.info(f"MARGIN {round(metrics['rewards/reward_margin'],5)} and LOSS {round(metrics['training/loss'],2)} in STEP {self.global_step_counter_}/{self.args.total_steps}")
+                if (i % log_every == 0):
+                    metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
+                    self.accelerator.log(metrics, step=self.global_step_counter_)
+                    logger.info(f"MARGIN {round(metrics['rewards/reward_margin'],5)} and LOSS {round(metrics['training/loss'],2)} in STEP {self.global_step_counter_}/{self.args.total_steps}")
 
-            self.global_step_counter_ += 1
+                self.global_step_counter_ += 1
 
     def finish(self):
         self.accelerator.end_training()
