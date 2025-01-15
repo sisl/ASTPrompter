@@ -87,4 +87,8 @@ for prompt_id, prompt in enumerate(tqdm(prompts, desc="Rolling out prompts")):
             "baseline_rollout": ro_base
         })
 
+# Check that output/ exists and create it if it doesn't
+if not os.path.exists("output"):
+    os.makedirs("output")
+
 json.dump(output_data, open("output/rollout_data_llama_v_llama.json", "w"))
