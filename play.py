@@ -7,10 +7,9 @@ from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utteran
 from environment import episode
 import torch
 import random
+import os
 
-checkpoint = "./models/TL_v_TL_beta_1e-1_best"
-# checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-16000"
-# checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-500"
+checkpoint = os.getenv("HOME") + "/models/llama_v_llama_best"
 base = "TinyLlama/TinyLlama_v1.1"
 defender = "TinyLlama/TinyLlama_v1.1"
 
@@ -41,15 +40,18 @@ tokenizer_defender = AutoTokenizer.from_pretrained(defender)
 
 adversary = LanguageModel(dont_init=True)
 adversary.model = model
-adversary.tokenizer = tokenizer
+adversary.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B") # Adjust to match adversary model
+adversary.to(torch.device("cuda"))
 
 base = LanguageModel(dont_init=True)
 base.model = model_base
 base.tokenizer = tokenizer
+base.to(torch.device("cuda"))
 
 defender = LanguageModel(dont_init=True)
 defender.model = model_defender
 defender.tokenizer = tokenizer_defender
+defender.to(torch.device("cuda"))
 
 
 while True:
