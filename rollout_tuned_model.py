@@ -1,5 +1,6 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from convokit import Corpus, download, Conversation
+from datasets import load_dataset
 from lm import LanguageModel
 from toxicity.detoxify_reddit import filter_corpus_toxicity, jsonl_to_dict
 from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance
@@ -14,28 +15,49 @@ from rich.console import Console
 from rich.text import Text
 from tqdm import tqdm
 
-attacker_name = "/models/llama_v_llama_best"
-checkpoint = os.getenv("HOME") + attacker_name
+def get_free_gpu():
+    if not torch.cuda.is_available():
+        return "cpu"
+    free_memory = []
+    for i in range(torch.cuda.device_count()):
+        free_memory.append((torch.cuda.get_device_properties(i).total_memory - torch.cuda.memory_allocated(i), i))
+    _, best_gpu = max(free_memory)
+    return f"cuda:{best_gpu}"
+
+
+attacker_name = "llama_v_llama_best"
+checkpoint = os.getenv("HOME") + "/models/" + attacker_name
 base_name = "TinyLlama/TinyLlama_v1.1"
 defender_name = "TinyLlama/TinyLlama_v1.1"
+device = get_free_gpu()
 
-# load our initial corpus ahead of time
-corpus = Corpus(filename=download("reddit-corpus-small"))
-id2results = jsonl_to_dict('detox_results.jsonl')
-corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
-corpus = filter_corpus_formatting(corpus)
-convos = list(corpus.conversations.values())
+# prompt_source = "reddit" # Options: real-toxicity-prompts, reddit
+prompt_source = "real-toxicity-prompts"
 
-# we only keep the last five utterances (and also discard the front
-# because the front is the self-post on reddit)
-prompts = [[clean_utterance(j.text)
-            for j in list(i.iter_utterances())
-            if j.text.strip() != "[deleted]"
-            and j.text.strip() != ""][1:][-2:]
-           for i in convos]
-prompts = [[j+" " for j in i if j.strip() != ""]
-        for i in prompts]
-prompts = [i for i in prompts if len(i) != 0]
+#  Select and 
+if prompt_source == "reddit":
+    corpus = Corpus(filename=download("reddit-corpus-small"))
+    id2results = jsonl_to_dict('detox_results.jsonl')
+    corpus = filter_corpus_toxicity(corpus, id2results, {"toxicity": 0.5})
+    corpus = filter_corpus_formatting(corpus)
+    convos = list(corpus.conversations.values())
+
+    # we only keep the last five utterances (and also discard the front
+    # because the front is the self-post on reddit)
+    prompts = [[clean_utterance(j.text)
+                for j in list(i.iter_utterances())
+                if j.text.strip() != "[deleted]"
+                and j.text.strip() != ""][1:][-2:]
+            for i in convos]
+    prompts = [[j+" " for j in i if j.strip() != ""]
+            for i in prompts]
+    prompts = [i for i in prompts if len(i) != 0]
+elif prompt_source == "real-toxicity-prompts":
+    ds = load_dataset("allenai/real-toxicity-prompts")
+
+    prompts = [p['text'] for p in ds['train']['prompt']]
+else:
+    raise ValueError("Invalid prompt source")
 
 model = AutoModelForCausalLM.from_pretrained(checkpoint)
 model_base = AutoModelForCausalLM.from_pretrained(base_name)
@@ -47,20 +69,20 @@ tokenizer_defender = AutoTokenizer.from_pretrained(defender_name)
 adversary = LanguageModel(dont_init=True)
 adversary.model = model
 adversary.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
-adversary.to(torch.device("cuda"))
+adversary.to(torch.device(device))
 
 base = LanguageModel(dont_init=True)
 base.model = model_base
 base.tokenizer = tokenizer
-base.to(torch.device("cuda"))
+base.to(torch.device(device))
 
 defender = LanguageModel(dont_init=True)
 defender.model = model_defender
 defender.tokenizer = tokenizer_defender
-defender.to(torch.device("cuda"))
+defender.to(torch.device(device))
 
 rollouts_per_prompt = 5
-turns = 2
+turns = 1
 
 output_data = {
     "config": {
@@ -68,13 +90,18 @@ output_data = {
         "base": base_name,
         "defender": defender_name,
         "rollouts_per_prompt": rollouts_per_prompt,
-        "turns": turns
+        "turns": turns,
+        "prompt_source": prompt_source
     },
     "rollouts": []
 }
 
 for prompt_id, prompt in enumerate(tqdm(prompts, desc="Rolling out prompts")):
-    p = [" ".join(prompt).replace('\n', ' ')]  # Ensure prompt is just a single utterance
+    if prompt_source == "reddit":
+        # Ensure prompt is just a single utterance if from Reddit
+        p = [" ".join(prompt).replace('\n', ' ')] 
+    else:
+        p = [prompt]
 
     for _ in range(rollouts_per_prompt):
         ro_policy = episode(adversary, defender, p, horizon=turns, return_sequence=True)
@@ -91,4 +118,4 @@ for prompt_id, prompt in enumerate(tqdm(prompts, desc="Rolling out prompts")):
 if not os.path.exists("output"):
     os.makedirs("output")
 
-json.dump(output_data, open("output/rollout_data_llama_v_llama.json", "w"))
+json.dump(output_data, open(f"output/rollout_data_{attacker_name}_{prompt_source.replace("-", "_")}.json", "w"))

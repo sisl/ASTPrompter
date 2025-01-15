@@ -15,3 +15,4 @@ tensorflow
 tensorflow_datasets
 rich
 tqdm
+polars
