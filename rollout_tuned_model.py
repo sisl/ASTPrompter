@@ -14,13 +14,20 @@ import json
 from rich.console import Console
 from rich.text import Text
 from tqdm import tqdm
+from pynvml import *
+
+# Used to get GPU information globally (for processes other than the current one)
+# Used to inform GPU selection
+nvmlInit()
 
 def get_free_gpu():
     if not torch.cuda.is_available():
         return "cpu"
     free_memory = []
+    
     for i in range(torch.cuda.device_count()):
-        free_memory.append((torch.cuda.get_device_properties(i).total_memory - torch.cuda.memory_allocated(i), i))
+        gpu_info = nvmlDeviceGetMemoryInfo(nvmlDeviceGetHandleByIndex(i))
+        free_memory.append((gpu_info.free, i))
     _, best_gpu = max(free_memory)
     return f"cuda:{best_gpu}"
 
@@ -33,6 +40,8 @@ device = get_free_gpu()
 
 # prompt_source = "reddit" # Options: real-toxicity-prompts, reddit
 prompt_source = "real-toxicity-prompts"
+
+max_prompts = 6000
 
 #  Select and 
 if prompt_source == "reddit":
@@ -96,7 +105,7 @@ output_data = {
     "rollouts": []
 }
 
-for prompt_id, prompt in enumerate(tqdm(prompts, desc="Rolling out prompts")):
+for prompt_id, prompt in enumerate(tqdm(prompts[:min(max_prompts, len(prompts))], desc="Rolling out prompts")):
     if prompt_source == "reddit":
         # Ensure prompt is just a single utterance if from Reddit
         p = [" ".join(prompt).replace('\n', ' ')] 

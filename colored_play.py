@@ -13,15 +13,22 @@ import os
 from rich.console import Console
 from rich.text import Text
 
+from pynvml import *
+
+# Used to get GPU information globally (for processes other than the current one)
+# Used to inform GPU selection
+nvmlInit()
+
 def get_free_gpu():
     if not torch.cuda.is_available():
         return "cpu"
     free_memory = []
+    
     for i in range(torch.cuda.device_count()):
-        free_memory.append((torch.cuda.get_device_properties(i).total_memory - torch.cuda.memory_allocated(i), i))
+        gpu_info = nvmlDeviceGetMemoryInfo(nvmlDeviceGetHandleByIndex(i))
+        free_memory.append((gpu_info.free, i))
     _, best_gpu = max(free_memory)
     return f"cuda:{best_gpu}"
-
 
 checkpoint = os.getenv("HOME") + "/models/llama_v_llama_best"
 base = "TinyLlama/TinyLlama_v1.1"
