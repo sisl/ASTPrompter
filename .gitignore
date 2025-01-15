@@ -1,3 +1,13 @@
+# IDE Files
+.vscode
+.idea
+.python-version
+
+# Data Files
+data/
+output/
+
+# Python Files
 .env
 /__pycache__/
 data
