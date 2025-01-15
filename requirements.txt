@@ -13,3 +13,4 @@ jsonlines
 scikit-learn
 tensorflow
 tensorflow_datasets
+rich
