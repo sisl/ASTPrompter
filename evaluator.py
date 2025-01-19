@@ -34,19 +34,19 @@ class Evaluator:
         # just use it in our inference wrapper
 
         self.adversary = LanguageModel(dont_init=True)
-        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.weights)
+        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.weights, torch_dtype=torch.bfloat16)
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.weights)
 
         self.defender = LanguageModel(dont_init=True)
-        self.defender.model = AutoModelForCausalLM.from_pretrained(args.defense)
+        self.defender.model = AutoModelForCausalLM.from_pretrained(args.defense, torch_dtype=torch.bfloat16)
         self.defender.tokenizer = AutoTokenizer.from_pretrained(args.defense)
         self.defender.model.eval()
 
         # GPT 2 doesn't have a padding token, so we add it
-        self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
-        self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
-        self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
-        self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
+#         self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
+        # self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
+        # self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
+        # self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
         # because the accelerator may move models to weird places, we 
         # account for that
