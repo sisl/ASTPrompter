@@ -42,13 +42,13 @@ class BadEvaluator:
         # supposedly, though, APIs are the same so we can
         # just use it in our inference wrapper
         self.defender = LanguageModel(dont_init=True)
-        self.defender.model = AutoModelForCausalLM.from_pretrained(args.defense)
+        self.defender.model = AutoModelForCausalLM.from_pretrained(args.defense, torch_dtype=torch.bfloat16)
         self.defender.tokenizer = AutoTokenizer.from_pretrained(args.defense)
         self.defender.model.eval()
 
         # GPT 2 doesn't have a padding token, so we add it
-        self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
-        self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
+        # self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
+        # self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
         # because the accelerator may move models to weird places, we 
         # account for that
@@ -211,6 +211,7 @@ class BadEvaluator:
 
         # Get current ast_ut
         ast_ut = ast_prompts[depth]
+        print(len(ast_ut))
      
         # rollouts, scoring each to figure out who won
         ro = self.handle_prompt(defender, ast_ut, prompt_src, **kwargs)
