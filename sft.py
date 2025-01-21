@@ -63,8 +63,8 @@ dataset = Dataset.from_list(prompts_rtp)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='SFT Trainer')
     parser.add_argument('--weights', type=str, help='which model shall we evaluate?', default="openai-community/gpt2")
-    parser.add_argument('--defense', type=str, help='what weights should we use for defense?',
-                        default="openai-community/gpt2")
+#     parser.add_argument('--defense', type=str, help='what weights should we use for defense?',
+                        # default="openai-community/gpt2")
     parser.add_argument('--warmup_steps', type=int, default=150,
                         help='number of warmup steps')
     args = parser.parse_args()
@@ -78,16 +78,16 @@ if __name__ == "__main__":
     adversary.tokenizer = AutoTokenizer.from_pretrained(args.weights)
     
     # Init defender
-    defender = LanguageModel(dont_init=True)
-    defender.model = AutoModelForCausalLM.from_pretrained(args.defense)
-    defender.tokenizer = AutoTokenizer.from_pretrained(args.defense)
-    defender.model.eval()
+    # defender = LanguageModel(dont_init=True)
+    # defender.model = AutoModelForCausalLM.from_pretrained(args.defense)
+    # defender.tokenizer = AutoTokenizer.from_pretrained(args.defense)
+    # defender.model.eval()
     
     # GPT 2 doesn't have a padding token, so we add it
-    adversary.tokenizer.pad_token = adversary.tokenizer.eos_token
-    defender.tokenizer.pad_token = defender.tokenizer.eos_token
-    adversary.tokenizer.pad_token_id = adversary.tokenizer.eos_token_id
-    defender.tokenizer.pad_token_id = defender.tokenizer.eos_token_id
+    # adversary.tokenizer.pad_token = adversary.tokenizer.eos_token
+    # defender.tokenizer.pad_token = defender.tokenizer.eos_token
+    # adversary.tokenizer.pad_token_id = adversary.tokenizer.eos_token_id
+    # defender.tokenizer.pad_token_id = defender.tokenizer.eos_token_id
     
     # Optimizer and scheduler
     # Default LR from HF SFTConfig
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     scheduler = LambdaLR(optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / (args.warmup_steps + 1)))
    
     # In case accelerator moves things around
-    (adversary.model, defender.model, optimizer, scheduler) = accelerator.prepare(adversary.model, defender.model, optimizer, scheduler)
+    (adversary.model, optimizer, scheduler) = accelerator.prepare(adversary.model, optimizer, scheduler)
 
     # Register the LR scheduler
     accelerator.register_for_checkpointing(scheduler)
