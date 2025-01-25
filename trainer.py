@@ -291,8 +291,7 @@ class Trainer:
 
     def __loss(self, policy_chosen_logps, policy_rejected_logps,
                      reference_chosen_logps, reference_rejected_logps):
-        # https://github.com/eric-mitchell/direct-preference-optimization/blob/ \
-        # f8b8c0f49dc92a430bae41585f9d467d3618fe2f/trainers.py#L70-L87
+        # https://github.com/eric-mitchell/direct-preference-optimization/blob/f8b8c0f49dc92a430bae41585f9d467d3618fe2f/trainers.py#L70-L87
         pi_logratios = policy_chosen_logps - policy_rejected_logps
         ref_logratios = reference_chosen_logps - reference_rejected_logps
         logits = pi_logratios - ref_logratios  # also known as h_{\pi_\theta}^{y_w,y_l}

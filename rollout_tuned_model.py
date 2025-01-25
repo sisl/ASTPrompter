@@ -3,7 +3,8 @@ from convokit import Corpus, download, Conversation
 from datasets import load_dataset
 from lm import LanguageModel
 from toxicity.detoxify_reddit import filter_corpus_toxicity, jsonl_to_dict
-from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance
+from toxicity.reddit_data_helpers import filter_corpus_formatting, clean_utterance, corpus_to_prompts
+from toxicity.split_data import filter_corpus_by_file
 
 from environment import episode
 import torch
@@ -32,14 +33,18 @@ def get_free_gpu():
     return f"cuda:{best_gpu}"
 
 
-attacker_name = "llama_v_llama_best"
+# attacker_name = "llama_v_llama_best"
+attacker_name = "gpt2_defense_gpt2_best"
 checkpoint = os.getenv("HOME") + "/models/" + attacker_name
-base_name = "TinyLlama/TinyLlama_v1.1"
-defender_name = "TinyLlama/TinyLlama_v1.1"
+base_name = "openai-community/gpt2"
+defender_name = "openai-community/gpt2"
+# base_name = "TinyLlama/TinyLlama_v1.1"
+# defender_name = "TinyLlama/TinyLlama_v1.1"
 device = get_free_gpu()
 
 # prompt_source = "reddit" # Options: real-toxicity-prompts, reddit
-prompt_source = "real-toxicity-prompts"
+# prompt_source = "real-toxicity-prompts"
+prompt_source = "convokit"
 
 max_prompts = 6000
 
@@ -65,19 +70,22 @@ elif prompt_source == "real-toxicity-prompts":
     ds = load_dataset("allenai/real-toxicity-prompts")
 
     prompts = [p['text'] for p in ds['train']['prompt']]
+elif prompt_source == "convokit":
+    train_corp = filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")), "data/train.txt")
+    prompts = corpus_to_prompts(train_corp)
 else:
     raise ValueError("Invalid prompt source")
 
 model = AutoModelForCausalLM.from_pretrained(checkpoint)
 model_base = AutoModelForCausalLM.from_pretrained(base_name)
-# model_defender = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="flash_attention_2", load_in_4bit=True, torch_dtype=torch.float16)
 model_defender = AutoModelForCausalLM.from_pretrained(defender_name)
-tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama_v1.1")
+tokenizer = AutoTokenizer.from_pretrained(defender_name)
 tokenizer_defender = AutoTokenizer.from_pretrained(defender_name)
 
 adversary = LanguageModel(dont_init=True)
 adversary.model = model
-adversary.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
+# adversary.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
+adversary.tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 adversary.to(torch.device(device))
 
 base = LanguageModel(dont_init=True)
@@ -91,7 +99,7 @@ defender.tokenizer = tokenizer_defender
 defender.to(torch.device(device))
 
 rollouts_per_prompt = 5
-turns = 1
+turns = 3
 
 output_data = {
     "config": {
@@ -106,7 +114,7 @@ output_data = {
 }
 
 for prompt_id, prompt in enumerate(tqdm(prompts[:min(max_prompts, len(prompts))], desc="Rolling out prompts")):
-    if prompt_source == "reddit":
+    if prompt_source == "reddit" or prompt_source == "convokit":
         # Ensure prompt is just a single utterance if from Reddit
         p = [" ".join(prompt).replace('\n', ' ')] 
     else:

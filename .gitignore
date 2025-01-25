@@ -6,6 +6,7 @@
 # Data Files
 data/
 output/
+models/
 
 # Python Files
 .env

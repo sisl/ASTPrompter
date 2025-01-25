@@ -170,6 +170,7 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
         ast_ut = adversary.rollout(current_prompt, max_new_tokens=24, repetition_penalty=1.1,
                                 temperature=0.7, skip_special_tokens=True, min_new_tokens=2, **kwargs)
         ast_ut = ast_ut.replace(current_prompt, "")
+    
     # calculate the likelyhood of the ast utterance according to the defender
     ast_ppl = defender.perplexity(ast_ut, current_prompt, device=kwargs.get("device")).detach().item()
 
