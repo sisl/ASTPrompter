@@ -415,7 +415,7 @@ def train_defender(
     baseline: ModelName = ModelName.gpt2,
     defender: ModelName = ModelName.gpt2,
     epochs: int = typer.Option(10000, help="Number of epochs to train the defender model"),
-    wandb: bool = typer.Option(True, help="Whether to log to wandb"),
+    enable_wandb: bool = typer.Option(True, help="Whether to log to wandb"),
     po_method: PoMethod = typer.Option(PoMethod.dpo, help="The policy optimization method to use"),
     po_beta: float = typer.Option(0.1, help="The beta parameter for the DPO objective"),
     dpo_label_smooth: float = typer.Option(0.1, help="Label smoothing for the DPO objective"),
@@ -434,6 +434,13 @@ def train_defender(
     """
     Train a baseline model into a hardened defender model based on example rollouts generated using an attacker model
     trained using adaptive stress testing.
+
+    Example use:
+
+    ```
+    python train_defender.py gpt2_hardened
+    ```
+
     """
 
     # Confirm that a GPU is available
@@ -520,7 +527,7 @@ def train_defender(
     best_model = float('inf')
 
     # Initialize Wandb
-    if wandb:
+    if enable_wandb:
         wandb.init(project="AST Defener Hardening", config=config)
 
     epoch = 0
