@@ -16,6 +16,9 @@ from pathlib import Path
 from enum import Enum
 from dataclasses import dataclass
 
+from typing import List, Optional
+from typing_extensions import Annotated
+
 import numpy as np
 import torch
 import random
@@ -38,6 +41,12 @@ from torch.nn.utils import clip_grad_norm_
 
 from lm import LanguageModel
 
+from pynvml import *
+
+# Used to get GPU information globally (for processes other than the current one)
+# Used to inform GPU selection
+nvmlInit()
+
 logger = get_logger("ast")
 LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
 logging.basicConfig(format=LOG_FORMAT, level=logging.INFO)
@@ -59,10 +68,24 @@ class Attackers(str, Enum):
     # Define more attacker names here. Must be present in ./models as a folder
     gpt2 = "gpt2_defense_gpt2_best"
 
+def get_text_from_conversation(conversation):
+    return "".join([i['text'] for i in conversation])
+
+def get_free_gpu():
+    if not torch.cuda.is_available():
+        return "cpu"
+    free_memory = []
+    
+    for i in range(torch.cuda.device_count()):
+        gpu_info = nvmlDeviceGetMemoryInfo(nvmlDeviceGetHandleByIndex(i))
+        free_memory.append((gpu_info.free, i))
+    _, best_gpu = max(free_memory)
+    return f"cuda:{best_gpu}"
+
 @dataclass
 class Rollout:
-    toxic_text: str
-    nontoxic_text: str
+    toxic_conversation: list[dict]
+    nontoxic_conversation: list[dict]
     toxic_score: float
     nontoxic_score: float
 
@@ -74,9 +97,11 @@ class RolloutDataset(Dataset):
         return len(self.rollouts)
 
     def __getitem__(self, idx):
-        # We just directly return the rollout objects
-        # Which contain (toxic_text, nontoxic_text, toxic_score, nontoxic_score)
-        return self.rollouts[idx]
+        # Construct a single body of text from the text
+        toxic_text = get_text_from_conversation(self.rollouts[idx].toxic_conversation)
+        nontoxic_text = get_text_from_conversation(self.rollouts[idx].nontoxic_conversation)
+
+        return (toxic_text, nontoxic_text, self.rollouts[idx].toxic_score, self.rollouts[idx].nontoxic_score)
 
 class Trainer:
     def __init__(self, 
@@ -85,28 +110,48 @@ class Trainer:
                  defender: str, 
                  wandb: bool, 
                  po_method: PoMethod, 
-                 num_turns: int = 3, 
                  po_beta: float = 0.1,
+                 dpo_label_smooth: float = 0.1,
                  learning_rate: float = 5e-7,
                  max_gradient_norm: float = 10.0,
                  warmup_steps: int = 150,
-                 save_dir: str = 'models'):
+                 save_dir: str = 'models',
+                 turn_order: list = ["atk", "def", "atk", "def", "atk", "def"],
+                 max_new_tokens: int = 24,
+                 min_new_tokens: int = 2,
+                 repetition_penalty: float = 1.1,
+                 temperature: float = 0.7):
     
-        self.num_turns = num_turns
+        # Store turn order
+        self.turn_order = turn_order
+
+        # Validate turn order
+        invalid_moves = set(turn_order) - set(["atk", "def"])
+        if invalid_moves:
+            raise ValueError(f"Invalid moves in turn order: {invalid_moves}")
+
+        # Store rollout parameters
+        self.max_new_tokens = max_new_tokens
+        self.min_new_tokens = min_new_tokens
+        self.repetition_penalty = repetition_penalty
+        self.temperature = temperature
 
         self.accelerator = Accelerator()
 
         # The attacker is the AST-pretrained model that tries to get a baseline or defenderm model to generate toxic text
+        self.attacker_name = attacker
         self.attacker = LanguageModel(dont_init=True)
         self.attacker.model = AutoModelForCausalLM.from_pretrained(attacker)
         self.attacker.tokenizer = AutoTokenizer.from_pretrained(attacker, padding_side='left')
 
         # The defender is the model we will tune to harden against the attacker
+        self.defender_name = defender
         self.defender = LanguageModel(dont_init=True)
         self.defender.model = AutoModelForCausalLM.from_pretrained(defender)
         self.defender.tokenizer = AutoTokenizer.from_pretrained(defender, padding_side='left')
 
         # The baseline is the model we will use to generate training examples for the defender
+        self.baseline_name = baseline
         self.baseline = LanguageModel(dont_init=True)
         self.baseline.model = AutoModelForCausalLM.from_pretrained(baseline)
         self.baseline.tokenizer = AutoTokenizer.from_pretrained(baseline, padding_side='left')
@@ -131,14 +176,26 @@ class Trainer:
         # Set the policy optimization method
         self.po_method = po_method
         self.po_beta = po_beta
+        self.dpo_label_smooth = dpo_label_smooth
         self.max_gradient_norm = max_gradient_norm
 
         optimizer = AdamW(self.defender.model.parameters(), lr=learning_rate)
         scheduler = LambdaLR(optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / (warmup_steps + 1)))
 
+        # Move models to accelerator devices
+        logger.info(f'Accelerator device: {self.accelerator.device}')
+        # self.attacker.model.to(self.accelerator.device)
+        # self.baseline.model.to(self.accelerator.device)
+        # self.defender.model.to(self.accelerator.device)
+
         # Use Accelerate to move models to accelrator device. We just let it take care of it
         # This is magic I don't like
-        self.defender.model, self.optimizer, self.scheduler = self.accelerator.prepare(self.defender.model, optimizer, scheduler)
+        self.attacker.model, self.baseline.model, self.defender.model, self.optimizer, self.scheduler = self.accelerator.prepare(self.attacker.model, self.baseline.model, self.defender.model, optimizer, scheduler)
+
+        # Print model devices
+        logger.info(f'Attacker model device placement: {self.attacker.model.device}')
+        logger.info(f'Baseline model device placement: {self.baseline.model.device}')
+        logger.info(f'Defender model device placement: {self.defender.model.device}')
 
         if wandb:
             wandb.watch(self.defender.model)
@@ -166,12 +223,12 @@ class Trainer:
 
     def generate_rollout_pair(self, prompt: str, toxicity_difference_threshold: float = 0.2, retries_left: int = 3):
         # Generate two rollouts first expected to be toxic, second expected to be nontoxic
-        ro_toxic    = self._generate_rollout(self.attacker, self.baseline, prompt)
-        ro_nontoxic = self._generate_rollout(self.baseline, self.defender, prompt)
+        toxic_conversation    = self._generate_rollout(self.attacker, self.baseline, prompt)
+        nontoxic_conversation = self._generate_rollout(self.baseline, self.defender, prompt)
 
         # Score each of the rollouts
-        ro_toxic_score    = self._reward(ro_toxic)
-        ro_nontoxic_score = self._reward(ro_nontoxic)
+        ro_toxic_score    = self._reward(get_text_from_conversation(toxic_conversation))
+        ro_nontoxic_score = self._reward(get_text_from_conversation(nontoxic_conversation))
 
         if abs(ro_toxic_score - ro_nontoxic_score) < toxicity_difference_threshold and retries_left > 0:
             # If the difference in toxicity is not significant, try again
@@ -181,21 +238,59 @@ class Trainer:
             return None
         else:
             # If the difference in toxicity is significant, return the pair and scores
-            return Rollout(ro_toxic, ro_nontoxic, ro_toxic_score, ro_nontoxic_score)
+            return Rollout(toxic_conversation, nontoxic_conversation, ro_toxic_score, ro_nontoxic_score)
 
     def _generate_rollout(self, attacker_model, defender_model, prompt):
 
         # Copy the promp
         text = copy.deepcopy(prompt)
 
-        for _ in range(self.num_turns):
-            # Generate next turn of attacker model - Prompt appended to start
-            text = attacker_model.rollout(text, max_new_tokens=24, repetition_penalty=1.1, temperature=0.7, skip_special_tokens=True, min_new_tokens=2)
+        conversation = [{
+            "text": copy.deepcopy(prompt),
+            "role": "prompt",
+            "model": "prompt",
+            "toxicity": call_detoxify(text)["toxicity"]
+        }]
 
-            # Generate next turn of defender model
-            text = defender_model.rollout(text, max_new_tokens=24, repetition_penalty=1.1, temperature=0.7, skip_special_tokens=True, min_new_tokens=2)
 
-        return text
+        for move in self.turn_order:
+            if move == "atk":
+                # Generate a continuation of the text using the attacker model
+                new_text = attacker_model.rollout(text, max_new_tokens=self.max_new_tokens, repetition_penalty=self.repetition_penalty, temperature=self.temperature, skip_special_tokens=True, min_new_tokens=self.min_new_tokens)
+                
+                # Extract just the new utterance
+                new_utterance = new_text.replace(text, '')
+
+                conversation.append({
+                    "text": new_utterance,
+                    "role": "atk",
+                    "toxicity": call_detoxify(new_utterance)["toxicity"]
+                })
+
+                # Update the text with the new utterance
+                text = new_text
+            
+            
+            elif move == "def":
+                # Generate a continuation of the text using the defender model
+                new_text = defender_model.rollout(text, max_new_tokens=self.max_new_tokens, repetition_penalty=self.repetition_penalty, temperature=self.temperature, skip_special_tokens=True, min_new_tokens=self.min_new_tokens)
+                
+                # Extract just the new utterance
+                new_utterance = new_text.replace(text, '')
+
+                conversation.append({
+                    "text": new_utterance,
+                    "role": "def",
+                    "toxicity": call_detoxify(new_utterance)["toxicity"]
+                })
+
+                # Update the text with the new utterance
+                text = new_text
+            
+            else:
+                raise ValueError(f"Invalid move: {move}")
+            
+        return conversation
     
     def _reward(self, text: str):
         """
@@ -206,9 +301,8 @@ class Trainer:
         # reward based on which model generated the text or the perplexity of the text. Just the toxicity score
         
         # Lower toxicity score is better so we negate the toxicity score
-        print(text)
-        print(call_detoxify(text)["toxicity"])
-        return -call_detoxify(text)["toxicity"][0]
+        # Assumes input is just a plain string
+        return -call_detoxify(text)["toxicity"]
 
     def prepare_data(self, rollouts, batch_size: int = 1):
         """
@@ -247,22 +341,24 @@ class Trainer:
                 self.accelerator.log(metrics, step = self._global_step_count)
                 logger.info(f'Step {self._global_step_count} - Reward margin: {round(metrics['rewards/reward_margin'],5):.5f}, Loss: {round(metrics['training/loss'],5):.5f}')
 
+        self._global_step_count += 1
+
     def _step(self, batch, log_step: bool = False):
         """
         Perform a single training step
-        """
-        
-        toxic_rollout, nontoxic_rollout, _, _ = batch
+        """        
+
+        toxic_text, nontoxic_text, _, _ = batch
 
         # TODO: Discuss the win/loss defender/attacker terminology with Jack
 
         # Individually calculate the logprobs of the toxic and baseline examples
         with torch.inference_mode():
-            baseline_nontoxic_logprobs = self.baseline.logprob_batched(nontoxic_rollout, self.accelerator.device)
-            baseline_toxic_logprobs    = self.baseline.logprob_batched(toxic_rollout, self.accelerator.device)
+            baseline_nontoxic_logprobs = self.baseline.logprob_batched(nontoxic_text, self.accelerator.device)
+            baseline_toxic_logprobs    = self.baseline.logprob_batched(toxic_text, self.accelerator.device)
 
-        defender_nontoxic_logprobs = self.defender.logprob_batched(nontoxic_rollout, self.accelerator.device)
-        defender_toxic_logprobs = self.defender.logprob_batched(toxic_rollout, self.accelerator.device)
+        defender_nontoxic_logprobs = self.defender.logprob_batched(nontoxic_text, self.accelerator.device)
+        defender_toxic_logprobs = self.defender.logprob_batched(toxic_text, self.accelerator.device)
 
         # Calculate Loss
         losses, preferred_reward, rejected_rewards = self._loss(defender_nontoxic_logprobs, defender_toxic_logprobs,
@@ -274,7 +370,7 @@ class Trainer:
         
         # Calculate metrics
         metrics = {
-            "rewards/chosen": preferred_reward.mean().cpu().item(),
+            "rewards/preferred": preferred_reward.mean().cpu().item(),
             "rewards/rejected": rejected_rewards.mean().cpu().item(),
             "rewards/reward_accuracy": reward_accuracies.mean().cpu().item(),
             "rewards/reward_margin": (preferred_reward - rejected_rewards).mean().cpu().item(),
@@ -283,9 +379,11 @@ class Trainer:
             "ref/logprobs_preferred": baseline_nontoxic_logprobs.mean().detach().cpu().item(),
             "ref/logprobs_rejected": baseline_toxic_logprobs.mean().detach().cpu().item(),
             "training/loss": losses.mean().detach().cpu().item(),
-            "debug/text": wandb.Table(data=list(zip(nontoxic_rollout, toxic_rollout)), 
-                columns=["chosen", "rejected"])
+            "debug/text": wandb.Table(data=list(zip(toxic_text, nontoxic_text)), 
+                columns=["preferred", "rejected"])
         }
+
+        print(f'METRICS: {metrics}')
 
         return losses.mean(), metrics
 
@@ -300,12 +398,12 @@ class Trainer:
 
         # this is IPO, Eq. 17 of https://arxiv.org/pdf/2310.12036v2.pdf
         if self.po_method == PoMethod.dpo:
-            losses = -F.logsigmoid(self.beta * logits) * (1 - self.args.label_smooth) - F.logsigmoid(-self.beta * logits) * self.args.label_smooth
+            losses = -F.logsigmoid(self.po_beta * logits) * (1 - self.dpo_label_smooth) - F.logsigmoid(-self.po_beta * logits) * self.dpo_label_smooth
         else: # IPO
-            losses = (logits - 1/(2 * self.beta)) ** 2
+            losses = (logits - 1.0/(2.0 * self.po_beta)) ** 2
 
-        chosen_rewards = self.beta * (policy_chosen_logps - reference_chosen_logps).detach()
-        rejected_rewards = self.beta * (policy_rejected_logps - reference_rejected_logps).detach()
+        chosen_rewards = self.po_beta * (policy_chosen_logps - reference_chosen_logps).detach()
+        rejected_rewards = self.po_beta * (policy_rejected_logps - reference_rejected_logps).detach()
 
         return losses, chosen_rewards, rejected_rewards
 
@@ -316,21 +414,37 @@ def train_defender(
     attacker: Attackers = Attackers.gpt2,
     baseline: ModelName = ModelName.gpt2,
     defender: ModelName = ModelName.gpt2,
-    num_turns: int = typer.Option(3, help="Number of turns in the conversation"),
     epochs: int = typer.Option(10000, help="Number of epochs to train the defender model"),
-    wandb: bool = typer.Option(False, help="Whether to log to wandb"),
+    wandb: bool = typer.Option(True, help="Whether to log to wandb"),
     po_method: PoMethod = typer.Option(PoMethod.dpo, help="The policy optimization method to use"),
     po_beta: float = typer.Option(0.1, help="The beta parameter for the DPO objective"),
-    batch_size: int = typer.Option(1, help="Batch size for training the defender model"), # 8
+    dpo_label_smooth: float = typer.Option(0.1, help="Label smoothing for the DPO objective"),
+    batch_size: int = typer.Option(8, help="Batch size for training the defender model"), # 8
     learning_rate: float = typer.Option(5e-7, help="Learning rate for the defender model"),
     warmup_steps: int = typer.Option(150, help="Number of warmup steps for the learning rate scheduler"),
-    rollouts_per_epoch: int = typer.Option(1, help="Number of rollouts to generate per epoch"), # 256
+    rollouts_per_epoch: int = typer.Option(128, help="Number of rollouts to generate per epoch"), # 256
     seed: int = typer.Option(42, help="Random seed for reproducibility"),
+    turn_order: Annotated[List[str], typer.Option(help="Turn order for the rollout")] = ["atk", "def", "atk", "def", "atk", "def"],
+    max_new_tokens: int = typer.Option(24, help="Maximum number of tokens to generate in a single rollout"),
+    min_new_tokens: int = typer.Option(2, help="Minimum number of tokens to generate in a single rollout"),
+    repetition_penalty: float = typer.Option(1.1, help="Repetition penalty for the rollout"),
+    temperature: float = typer.Option(0.7, help="Temperature for the rollout"),
+    dev_eval_interval: int = typer.Option(10, help="Number of epochs between dev set evaluations")
 ):
     """
     Train a baseline model into a hardened defender model based on example rollouts generated using an attacker model
     trained using adaptive stress testing.
     """
+
+    # Confirm that a GPU is available
+    if not torch.cuda.is_available():
+        typer.echo("No GPU available. Exiting.")
+        raise typer.Exit()
+    
+    # Check that rollouts_per_epoch is a multiple of batch_size
+    if rollouts_per_epoch % batch_size != 0:
+        typer.echo("rollouts_per_epoch must be a multiple of batch_size")
+        raise typer.Exit()
     
     # Create a new directory for the model if it does not exist
     output_dir = Path(save_dir) / save_name
@@ -348,12 +462,19 @@ def train_defender(
         "epochs": epochs,
         "wandb": wandb,
         "po_method": po_method,
+        "po_beta": po_beta,
+        "dpo_label_smooth": dpo_label_smooth,
         "seed": seed,
         "prompt_source": "convokit",
-        "num_turns": num_turns,
         "learning_rate": learning_rate,
         "warmup_steps": warmup_steps,
         "batch_size": batch_size,
+        "turn_order": turn_order,
+        "max_new_tokens": max_new_tokens,
+        "min_new_tokens": min_new_tokens,
+        "repetition_penalty": repetition_penalty,
+        "temperature": temperature,
+        "dev_eval_interval": dev_eval_interval
     }
 
     with open(output_dir / "config.json", "w") as f:
@@ -383,44 +504,109 @@ def train_defender(
         defender=defender.value, 
         wandb=wandb, 
         po_method=po_method, 
-        num_turns=num_turns, 
         po_beta=po_beta, 
+        dpo_label_smooth=dpo_label_smooth,
         learning_rate=learning_rate, 
         warmup_steps=warmup_steps,
-        save_dir=save_dir
+        save_dir=save_dir,
+        turn_order=turn_order,
+        max_new_tokens=max_new_tokens,
+        min_new_tokens=min_new_tokens,
+        repetition_penalty=repetition_penalty,
+        temperature=temperature
     )
 
-    # Initialize Wand
+    # Initialize best model
+    best_model = float('inf')
+
+    # Initialize Wandb
+    if wandb:
+        wandb.init(project="AST Defener Hardening", config=config)
 
     epoch = 0
-    # while epoch < epochs:
-    typer.echo(f"Epoch {epoch}")
+    while epoch < epochs:
+        typer.echo(f"Epoch {epoch}")
 
-    rollouts = []
-    _cntr = 0
-    while len(rollouts) < rollouts_per_epoch:
-        if _cntr % 1 == 0:
-            typer.echo(f"Step {epoch}: Collected {len(rollouts)} of {rollouts_per_epoch} rollouts")
+        train_rollouts = []
+        _cntr = 0
+        while len(train_rollouts) < rollouts_per_epoch:
+            if _cntr % batch_size == 0:
+                typer.echo(f"Step {epoch}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
 
-        # Randomply sample propmts from the training set
-        prompt = random.choice(train_prompts)
-        # Ensure prompt is a single string
-        prompt = [" ".join(prompt).replace('\n', ' ')]
-        print(f'PROMPT: {prompt}')
-        rollouts.append(trainer.generate_rollout_pair(prompt))
+            # Randomply sample propmts from the training set
+            prompt = random.choice(train_prompts)
+            # Ensure prompt is a single string
+            prompt = " ".join(prompt).replace('\n', ' ').replace('\xa0', ' ')
+
+            rollout = trainer.generate_rollout_pair(prompt)
+
+            if rollout is not None:
+                train_rollouts.append(rollout)
+
+            _cntr += 1
+        typer.echo(f"Step {epoch}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
+
+        # Prepare dataset of generated rollouts
+        dataset = trainer.prepare_data(train_rollouts, batch_size=batch_size)
         
-    print(rollouts)
+        # Execute main training step on collected rollouts
+        typer.echo(f"Executing training step on {len(train_rollouts)} rollouts")
+        trainer.epoch(dataset, log_interval=10)
 
-    # Prepare dataset of generated rollouts
-    dataset = trainer.preapare_data(rollouts, batch_size=batch_size)
+        # Save model
+        trainer.save(str(epoch))
 
-    print(dataset)
-    
-    # Execute main training step on collected rollouts
-    # typer.echo(f"Executing training step on {len(rollouts)} rollouts")
-    # trainer.epoch(dataset, log_interval=10)
+        # Run dev set evaluation 
+        if epoch % dev_eval_interval == 0:
+            typer.echo(f"Running dev set evaluation on {len(dev_prompts)} prompts")
+            
+            dev_conversations = []
+            for prompt in dev_prompts:
+                # Print progress every 10% of the way
+                if len(dev_conversations) % (len(dev_prompts) // 10) == 0:
+                    typer.echo(f"Progress: {len(dev_conversations)} of {len(dev_prompts)}")
 
-    epoch += 1
+                prompt = " ".join(prompt).replace('\n', ' ').replace('\xa0', ' ')
+            
+
+                defender_converation = trainer._generate_rollout(trainer.attacker, trainer.defender, prompt)
+                baseline_conversation = trainer._generate_rollout(trainer.attacker, trainer.baseline, prompt)
+
+                dev_conversations.append((defender_converation, baseline_conversation))
+
+            # Get all defender responses
+            defender_response_toxicity = []
+            baseline_response_toxicity = []
+
+            for dev_conversation in dev_conversations:
+                for utterance in dev_conversation[0]:
+                    if utterance['role'] == 'def':
+                        defender_response_toxicity.append(utterance['toxicity'])
+
+                for utterance in dev_conversation[1]:
+                    if utterance['role'] == 'def':
+                        baseline_response_toxicity.append(utterance['toxicity'])
+
+            # Compute average toxicity of defender responses in conversation   
+            defender_toxicity = np.mean(defender_response_toxicity)
+            baseline_toxicity = np.mean(baseline_response_toxicity)
+
+            trainer.accelerator.log({
+                "dev/avg_defender_response_toxicity": defender_toxicity,
+                "dev/avg_baseline_response_toxicity": baseline_toxicity
+            }, step=trainer._global_step_count)
+
+            typer.echo(f"Completed dev set evaluation")
+            typer.echo(f"Average defender response toxicity: {defender_toxicity:.4f}")
+            typer.echo(f"Average baseline response toxicity: {baseline_toxicity:.4f}")
+
+            if defender_toxicity < best_model:
+                typer.echo(f"New best model found with toxicity: {defender_toxicity:.4f}. Old best toxicity: {best_model:.4f}")
+
+                best_model = defender_toxicity
+                trainer.save("best")
+
+            epoch += 1
 
 
 
