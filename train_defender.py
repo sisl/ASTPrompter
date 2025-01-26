@@ -617,28 +617,49 @@ def train_defender(
                     if utterance['role'] == 'def':
                         baseline_response_toxicity.append(utterance['toxicity'])
 
-            # Compute average toxicity of defender responses in conversation   
-            defender_toxicity = np.mean(defender_response_toxicity)
-            baseline_toxicity = np.mean(baseline_response_toxicity)
+            # Compute statistics of defender and baseline responses
+            defender_toxicity_mean = np.mean(defender_response_toxicity)
+            baseline_toxicity_mean = np.mean(baseline_response_toxicity)
+
+            defender_toxicity_sdev = np.std(defender_response_toxicity)
+            baseline_toxicity_sdev = np.std(baseline_response_toxicity)
+
+            defender_toxicity_max = np.max(defender_response_toxicity)
+            baseline_toxicity_max = np.max(baseline_response_toxicity)
+
+            defender_toxicity_min = np.min(defender_response_toxicity)
+            baseline_toxicity_min = np.min(baseline_response_toxicity)
 
             trainer.accelerator.log({
-                "dev/avg_defender_response_toxicity": defender_toxicity,
-                "dev/avg_baseline_response_toxicity": baseline_toxicity
+                "dev/defender_response_toxicity_mean": defender_toxicity_mean,
+                "dev/baseline_response_toxicity_mean": baseline_toxicity_mean,
+                "dev/defender_response_toxicity_sdev": defender_toxicity_sdev,
+                "dev/baseline_response_toxicity_sdev": baseline_toxicity_sdev,
+                "dev/defender_response_toxicity_max": defender_toxicity_max,
+                "dev/baseline_response_toxicity_max": baseline_toxicity_max,
+                "dev/defender_response_toxicity_min": defender_toxicity_min,
+                "dev/baseline_response_toxicity_min": baseline_toxicity_min
             }, step=trainer._global_step_count)
 
             wandb.log({
-                "dev/avg_defender_response_toxicity": defender_toxicity,
-                "dev/avg_baseline_response_toxicity": baseline_toxicity
+                "dev/defender_response_toxicity_mean": defender_toxicity_mean,
+                "dev/baseline_response_toxicity_mean": baseline_toxicity_mean,
+                "dev/defender_response_toxicity_sdev": defender_toxicity_sdev,
+                "dev/baseline_response_toxicity_sdev": baseline_toxicity_sdev,
+                "dev/defender_response_toxicity_max": defender_toxicity_max,
+                "dev/baseline_response_toxicity_max": baseline_toxicity_max,
+                "dev/defender_response_toxicity_min": defender_toxicity_min,
+                "dev/baseline_response_toxicity_min": baseline_toxicity_min
             }, step=trainer._global_step_count)
 
             logger.info(f"Completed dev set evaluation")
-            logger.info(f"Average defender response toxicity: {defender_toxicity:.4f}")
-            logger.info(f"Average baseline response toxicity: {baseline_toxicity:.4f}")
+            logger.info(f"Average defender response toxicity: {defender_toxicity_mean:.4f}")
+            logger.info(f"Average baseline response toxicity: {baseline_toxicity_mean:.4f}")
 
-            if defender_toxicity < best_model:
-                logger.info(f"New best model found with toxicity: {defender_toxicity:.4f}. Old best toxicity: {best_model:.4f}")
+            if defender_toxicity_mean < best_model:
+                logger.info(f"New best model found with toxicity: {defender_toxicity_mean:.4f}. Old best toxicity: {best_model:.4f}")
 
-                best_model = defender_toxicity
+                best_model = defender_toxicity_mean
                 trainer.save("best")
 
 
