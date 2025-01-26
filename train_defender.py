@@ -347,7 +347,7 @@ class Trainer:
                 self.accelerator.log(metrics, step = self._global_step_count)
                 logger.info(f'Step {self._global_step_count} - Reward margin: {round(metrics['rewards/reward_margin'],5):.5f}, Loss: {round(metrics['training/loss'],5):.5f}')
 
-        self._global_step_count += 1
+            self._global_step_count += 1
 
     def _step(self, batch, log_step: bool = False):
         """
@@ -448,7 +448,6 @@ def train_defender(
     min_new_tokens: int = typer.Option(2, help="Minimum number of tokens to generate in a single rollout"),
     repetition_penalty: float = typer.Option(1.1, help="Repetition penalty for the rollout"),
     temperature: float = typer.Option(0.7, help="Temperature for the rollout"),
-    dev_eval_interval: int = typer.Option(10, help="Number of epochs between dev set evaluations")
 ):
     """
     Train a baseline model into a hardened defender model based on example rollouts generated using an attacker model
@@ -500,7 +499,6 @@ def train_defender(
         "min_new_tokens": min_new_tokens,
         "repetition_penalty": repetition_penalty,
         "temperature": temperature,
-        "dev_eval_interval": dev_eval_interval,
         "hostname": os.uname().nodename
     }
 
@@ -587,80 +585,79 @@ def train_defender(
         trainer.save(str(trainer._global_step_count))
 
         # Run dev set evaluation 
-        if trainer._global_step_count % dev_eval_interval == 0:
-            logger.info(f"Running dev set evaluation on {len(dev_prompts)} prompts")
-            
-            dev_conversations = []
-            for prompt in dev_prompts:
-                # Print progress every 10% of the way
-                if len(dev_conversations) % (len(dev_prompts) // 10) == 0:
-                    logger.info(f"Progress: {len(dev_conversations)} of {len(dev_prompts)}")
+        logger.info(f"Running dev set evaluation on {len(dev_prompts)} prompts")
+        
+        dev_conversations = []
+        for prompt in dev_prompts:
+            # Print progress every 10% of the way
+            if len(dev_conversations) % (len(dev_prompts) // 10) == 0:
+                logger.info(f"Progress: {len(dev_conversations)} of {len(dev_prompts)}")
 
-                prompt = " ".join(prompt).replace('\n', ' ').replace('\xa0', ' ')
-            
+            prompt = " ".join(prompt).replace('\n', ' ').replace('\xa0', ' ')
+        
 
-                defender_converation = trainer._generate_rollout(trainer.attacker, trainer.defender, prompt)
-                baseline_conversation = trainer._generate_rollout(trainer.attacker, trainer.baseline, prompt)
+            defender_converation = trainer._generate_rollout(trainer.attacker, trainer.defender, prompt)
+            baseline_conversation = trainer._generate_rollout(trainer.attacker, trainer.baseline, prompt)
 
-                dev_conversations.append((defender_converation, baseline_conversation))
+            dev_conversations.append((defender_converation, baseline_conversation))
 
-            # Get all defender responses
-            defender_response_toxicity = []
-            baseline_response_toxicity = []
+        # Get all defender responses
+        defender_response_toxicity = []
+        baseline_response_toxicity = []
 
-            for dev_conversation in dev_conversations:
-                for utterance in dev_conversation[0]:
-                    if utterance['role'] == 'def':
-                        defender_response_toxicity.append(utterance['toxicity'])
+        for dev_conversation in dev_conversations:
+            for utterance in dev_conversation[0]:
+                if utterance['role'] == 'def':
+                    defender_response_toxicity.append(utterance['toxicity'])
 
-                for utterance in dev_conversation[1]:
-                    if utterance['role'] == 'def':
-                        baseline_response_toxicity.append(utterance['toxicity'])
+            for utterance in dev_conversation[1]:
+                if utterance['role'] == 'def':
+                    baseline_response_toxicity.append(utterance['toxicity'])
 
-            # Compute statistics of defender and baseline responses
-            defender_toxicity_mean = np.mean(defender_response_toxicity)
-            baseline_toxicity_mean = np.mean(baseline_response_toxicity)
+        # Compute statistics of defender and baseline responses
+        defender_toxicity_mean = np.mean(defender_response_toxicity)
+        baseline_toxicity_mean = np.mean(baseline_response_toxicity)
 
-            defender_toxicity_sdev = np.std(defender_response_toxicity)
-            baseline_toxicity_sdev = np.std(baseline_response_toxicity)
+        defender_toxicity_sdev = np.std(defender_response_toxicity)
+        baseline_toxicity_sdev = np.std(baseline_response_toxicity)
 
-            defender_toxicity_max = np.max(defender_response_toxicity)
-            baseline_toxicity_max = np.max(baseline_response_toxicity)
+        defender_toxicity_max = np.max(defender_response_toxicity)
+        baseline_toxicity_max = np.max(baseline_response_toxicity)
 
-            defender_toxicity_min = np.min(defender_response_toxicity)
-            baseline_toxicity_min = np.min(baseline_response_toxicity)
+        defender_toxicity_min = np.min(defender_response_toxicity)
+        baseline_toxicity_min = np.min(baseline_response_toxicity)
 
-            trainer.accelerator.log({
-                "dev/defender_response_toxicity_mean": defender_toxicity_mean,
-                "dev/baseline_response_toxicity_mean": baseline_toxicity_mean,
-                "dev/defender_response_toxicity_sdev": defender_toxicity_sdev,
-                "dev/baseline_response_toxicity_sdev": baseline_toxicity_sdev,
-                "dev/defender_response_toxicity_max": defender_toxicity_max,
-                "dev/baseline_response_toxicity_max": baseline_toxicity_max,
-                "dev/defender_response_toxicity_min": defender_toxicity_min,
-                "dev/baseline_response_toxicity_min": baseline_toxicity_min
-            }, step=trainer._global_step_count)
+        trainer.accelerator.log({
+            "dev/defender_response_toxicity_mean": defender_toxicity_mean,
+            "dev/baseline_response_toxicity_mean": baseline_toxicity_mean,
+            "dev/defender_response_toxicity_sdev": defender_toxicity_sdev,
+            "dev/baseline_response_toxicity_sdev": baseline_toxicity_sdev,
+            "dev/defender_response_toxicity_max": defender_toxicity_max,
+            "dev/baseline_response_toxicity_max": baseline_toxicity_max,
+            "dev/defender_response_toxicity_min": defender_toxicity_min,
+            "dev/baseline_response_toxicity_min": baseline_toxicity_min
+        }, step=trainer._global_step_count)
 
-            wandb.log({
-                "dev/defender_response_toxicity_mean": defender_toxicity_mean,
-                "dev/baseline_response_toxicity_mean": baseline_toxicity_mean,
-                "dev/defender_response_toxicity_sdev": defender_toxicity_sdev,
-                "dev/baseline_response_toxicity_sdev": baseline_toxicity_sdev,
-                "dev/defender_response_toxicity_max": defender_toxicity_max,
-                "dev/baseline_response_toxicity_max": baseline_toxicity_max,
-                "dev/defender_response_toxicity_min": defender_toxicity_min,
-                "dev/baseline_response_toxicity_min": baseline_toxicity_min
-            }, step=trainer._global_step_count)
+        wandb.log({
+            "dev/defender_response_toxicity_mean": defender_toxicity_mean,
+            "dev/baseline_response_toxicity_mean": baseline_toxicity_mean,
+            "dev/defender_response_toxicity_sdev": defender_toxicity_sdev,
+            "dev/baseline_response_toxicity_sdev": baseline_toxicity_sdev,
+            "dev/defender_response_toxicity_max": defender_toxicity_max,
+            "dev/baseline_response_toxicity_max": baseline_toxicity_max,
+            "dev/defender_response_toxicity_min": defender_toxicity_min,
+            "dev/baseline_response_toxicity_min": baseline_toxicity_min
+        }, step=trainer._global_step_count)
 
-            logger.info(f"Completed dev set evaluation")
-            logger.info(f"Average defender response toxicity: {defender_toxicity_mean:.4f}")
-            logger.info(f"Average baseline response toxicity: {baseline_toxicity_mean:.4f}")
+        logger.info(f"Completed dev set evaluation")
+        logger.info(f"Average defender response toxicity: {defender_toxicity_mean:.4f}")
+        logger.info(f"Average baseline response toxicity: {baseline_toxicity_mean:.4f}")
 
-            if defender_toxicity_mean < best_model:
-                logger.info(f"New best model found with toxicity: {defender_toxicity_mean:.4f}. Old best toxicity: {best_model:.4f}")
+        if defender_toxicity_mean < best_model:
+            logger.info(f"New best model found with toxicity: {defender_toxicity_mean:.4f}. Old best toxicity: {best_model:.4f}")
 
-                best_model = defender_toxicity_mean
-                trainer.save("best")
+            best_model = defender_toxicity_mean
+            trainer.save("best")
 
     trainer.finish()
 
