@@ -399,7 +399,7 @@ class Trainer:
                 columns=["preferred", "rejected"])
         }
 
-        logger.info(f'METRICS: {metrics}')
+        # logger.info(f'METRICS: {metrics}')
 
         if self.enable_wandb:
             wandb.log(metrics, step=self._global_step_count)
