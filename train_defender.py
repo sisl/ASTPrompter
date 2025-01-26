@@ -108,7 +108,7 @@ class Trainer:
                  attacker: str, 
                  baseline: str, 
                  defender: str, 
-                 wandb: bool, 
+                 enable_wandb: bool, 
                  po_method: PoMethod, 
                  po_beta: float = 0.1,
                  dpo_label_smooth: float = 0.1,
@@ -198,7 +198,8 @@ class Trainer:
         logger.info(f'Baseline model device placement: {self.baseline.model.device}')
         logger.info(f'Defender model device placement: {self.defender.model.device}')
 
-        if wandb:
+        self.enable_wandb = enable_wandb
+        if enable_wandb:
             wandb.watch(self.defender.model)
 
         self.save_dir = save_dir
@@ -368,12 +369,12 @@ class Trainer:
         defender_nontoxic_logprobs = self.defender.logprob_batched(nontoxic_text, self.accelerator.device)
         defender_toxic_logprobs = self.defender.logprob_batched(toxic_text, self.accelerator.device)
 
-        print(f'baseline_nontoxic_logprobs: {baseline_nontoxic_logprobs}')
-        print(f'defender_nontoxic_logprobs: {defender_nontoxic_logprobs}')
-        print(f'Difference: {defender_nontoxic_logprobs - baseline_nontoxic_logprobs}')
-        print(f'baseline_toxic_logprobs: {baseline_toxic_logprobs}')
-        print(f'defender_toxic_logprobs: {defender_toxic_logprobs}')
-        print(f'Difference: {defender_toxic_logprobs - baseline_toxic_logprobs}')
+        logger.debug(f'baseline_nontoxic_logprobs: {baseline_nontoxic_logprobs}')
+        logger.debug(f'defender_nontoxic_logprobs: {defender_nontoxic_logprobs}')
+        logger.debug(f'Difference: {defender_nontoxic_logprobs - baseline_nontoxic_logprobs}')
+        logger.debug(f'baseline_toxic_logprobs: {baseline_toxic_logprobs}')
+        logger.debug(f'defender_toxic_logprobs: {defender_toxic_logprobs}')
+        logger.debug(f'Difference: {defender_toxic_logprobs - baseline_toxic_logprobs}')
 
         # Calculate Loss
         losses, preferred_reward, rejected_rewards = self._loss(defender_nontoxic_logprobs, defender_toxic_logprobs,
@@ -400,7 +401,8 @@ class Trainer:
 
         logger.info(f'METRICS: {metrics}')
 
-        wandb.log(metrics, step=self._global_step_count)
+        if self.enable_wandb:
+            wandb.log(metrics, step=self._global_step_count)
 
         return losses.mean(), metrics
 
@@ -439,7 +441,7 @@ def train_defender(
     batch_size: int = typer.Option(8, help="Batch size for training the defender model"), # 8
     learning_rate: float = typer.Option(5e-7, help="Learning rate for the defender model"),
     warmup_steps: int = typer.Option(150, help="Number of warmup steps for the learning rate scheduler"),
-    rollouts_per_epoch: int = typer.Option(64, help="Number of rollouts to generate per epoch"), # 256
+    rollouts_per_epoch: int = typer.Option(512, help="Number of rollouts to generate per epoch"), # 256
     seed: int = typer.Option(42, help="Random seed for reproducibility"),
     turn_order: Annotated[List[str], typer.Option(help="Turn order for the rollout")] = ["atk", "def", "atk", "def", "atk", "def"],
     max_new_tokens: int = typer.Option(24, help="Maximum number of tokens to generate in a single rollout"),
@@ -462,12 +464,12 @@ def train_defender(
 
     # Confirm that a GPU is available
     if not torch.cuda.is_available():
-        typer.echo("No GPU available. Exiting.")
+        logger.error("No GPU available. Exiting.")
         raise typer.Exit()
     
     # Check that rollouts_per_epoch is a multiple of batch_size
     if rollouts_per_epoch % batch_size != 0:
-        typer.echo("rollouts_per_epoch must be a multiple of batch_size")
+        logger.error("rollouts_per_epoch must be a multiple of batch_size")
         raise typer.Exit()
     
     # Create a new directory for the model if it does not exist
@@ -476,7 +478,7 @@ def train_defender(
     if not output_dir.exists():
         output_dir.mkdir(parents=True)
 
-    typer.echo(f"Saving model to {output_dir}")
+    logger.info(f"Saving model to {output_dir}")
 
     # Save the configuration to the output directory
     config = {
@@ -517,22 +519,22 @@ def train_defender(
     set_seed(seed)
 
     # Load data
-    typer.echo("Loading data...")
+    logger.info("Loading data...")
     train_prompts = corpus_to_prompts(filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")), "data/train.txt"))
     dev_prompts   = corpus_to_prompts(filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")), "data/dev.txt"))
 
     # Initialize Training Model
-    typer.echo("Initializing models...")
+    logger.info("Initializing models...")
 
-    typer.echo(f"Attacker: {attacker.value}")
-    typer.echo(f"Baseline: {baseline.value}")
-    typer.echo(f"Defender: {defender.value}")
+    logger.info(f"Attacker: {attacker.value}")
+    logger.info(f"Baseline: {baseline.value}")
+    logger.info(f"Defender: {defender.value}")
 
     trainer = Trainer(
         attacker= "./models/" + attacker.value, 
         baseline=baseline.value, 
         defender=defender.value, 
-        wandb=wandb, 
+        enable_wandb=enable_wandb, 
         po_method=po_method, 
         po_beta=po_beta, 
         dpo_label_smooth=dpo_label_smooth,
@@ -551,13 +553,13 @@ def train_defender(
     best_model = float('inf')
 
     while trainer._global_step_count < epochs:
-        typer.echo(f"Epoch {trainer._global_step_count}")
+        logger.info(f"Epoch {trainer._global_step_count}")
 
         train_rollouts = []
         _cntr = 0
         while len(train_rollouts) < rollouts_per_epoch:
             if _cntr % batch_size == 0:
-                typer.echo(f"Step {trainer._global_step_count}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
+                logger.info(f"Step {trainer._global_step_count}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
 
             # Randomply sample propmts from the training set
             prompt = random.choice(train_prompts)
@@ -570,13 +572,13 @@ def train_defender(
                 train_rollouts.append(rollout)
 
             _cntr += 1
-        typer.echo(f"Step {trainer._global_step_count}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
+        logger.info(f"Step {trainer._global_step_count}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
 
         # Prepare dataset of generated rollouts
         dataset = trainer.prepare_data(train_rollouts, batch_size=batch_size)
         
         # Execute main training step on collected rollouts
-        typer.echo(f"Executing training step on {len(train_rollouts)} rollouts")
+        logger.info(f"Executing training step on {len(train_rollouts)} rollouts")
         trainer.epoch(dataset, log_interval=10)
 
         # Save model
@@ -584,13 +586,13 @@ def train_defender(
 
         # Run dev set evaluation 
         if trainer._global_step_count % dev_eval_interval == 0:
-            typer.echo(f"Running dev set evaluation on {len(dev_prompts)} prompts")
+            logger.info(f"Running dev set evaluation on {len(dev_prompts)} prompts")
             
             dev_conversations = []
             for prompt in dev_prompts:
                 # Print progress every 10% of the way
                 if len(dev_conversations) % (len(dev_prompts) // 10) == 0:
-                    typer.echo(f"Progress: {len(dev_conversations)} of {len(dev_prompts)}")
+                    logger.info(f"Progress: {len(dev_conversations)} of {len(dev_prompts)}")
 
                 prompt = " ".join(prompt).replace('\n', ' ').replace('\xa0', ' ')
             
@@ -627,12 +629,12 @@ def train_defender(
                 "dev/avg_baseline_response_toxicity": baseline_toxicity
             }, step=trainer._global_step_count)
 
-            typer.echo(f"Completed dev set evaluation")
-            typer.echo(f"Average defender response toxicity: {defender_toxicity:.4f}")
-            typer.echo(f"Average baseline response toxicity: {baseline_toxicity:.4f}")
+            logger.info(f"Completed dev set evaluation")
+            logger.info(f"Average defender response toxicity: {defender_toxicity:.4f}")
+            logger.info(f"Average baseline response toxicity: {baseline_toxicity:.4f}")
 
             if defender_toxicity < best_model:
-                typer.echo(f"New best model found with toxicity: {defender_toxicity:.4f}. Old best toxicity: {best_model:.4f}")
+                logger.info(f"New best model found with toxicity: {defender_toxicity:.4f}. Old best toxicity: {best_model:.4f}")
 
                 best_model = defender_toxicity
                 trainer.save("best")
