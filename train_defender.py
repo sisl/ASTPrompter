@@ -355,8 +355,8 @@ class Trainer:
 
         toxic_text, nontoxic_text, _, _ = batch
         
-        print(f'Toxic text: {toxic_text[0]}')
-        print(f'Nontoxic text: {nontoxic_text[0]}')
+        # print(f'Toxic text: {toxic_text[0]}')
+        # print(f'Nontoxic text: {nontoxic_text[0]}')
 
         # TODO: Discuss the win/loss defender/attacker terminology with Jack
 
