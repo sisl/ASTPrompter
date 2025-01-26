@@ -662,6 +662,7 @@ def train_defender(
                 best_model = defender_toxicity_mean
                 trainer.save("best")
 
+    trainer.finish()
 
 if __name__ == "__main__":
     app()
