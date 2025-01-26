@@ -115,7 +115,7 @@ class Trainer:
                  learning_rate: float = 5e-7,
                  max_gradient_norm: float = 10.0,
                  warmup_steps: int = 150,
-                 save_dir: str = 'models',
+                 save_dir: str = 'output',
                  turn_order: list = ["atk", "def", "atk", "def", "atk", "def"],
                  max_new_tokens: int = 24,
                  min_new_tokens: int = 2,
@@ -216,7 +216,7 @@ class Trainer:
         Save the defender model
         """
 
-        filename = self.save_dir + "model_" + suffix if suffix is not None else str(self._global_step_count)
+        filename = self.save_dir + "/model_" + suffix if suffix is not None else str(self._global_step_count)
 
         self.defender.model.save_pretrained(filename)
         self.defender.tokenizer.save_pretrained(filename)
@@ -360,6 +360,13 @@ class Trainer:
         defender_nontoxic_logprobs = self.defender.logprob_batched(nontoxic_text, self.accelerator.device)
         defender_toxic_logprobs = self.defender.logprob_batched(toxic_text, self.accelerator.device)
 
+        print(f'baseline_nontoxic_logprobs: {baseline_nontoxic_logprobs}')
+        print(f'defender_nontoxic_logprobs: {defender_nontoxic_logprobs}')
+        print(f'Difference: {defender_nontoxic_logprobs - baseline_nontoxic_logprobs}')
+        print(f'baseline_toxic_logprobs: {baseline_toxic_logprobs}')
+        print(f'defender_toxic_logprobs: {defender_toxic_logprobs}')
+        print(f'Difference: {defender_toxic_logprobs - baseline_toxic_logprobs}')
+
         # Calculate Loss
         losses, preferred_reward, rejected_rewards = self._loss(defender_nontoxic_logprobs, defender_toxic_logprobs,
                                                               baseline_nontoxic_logprobs, baseline_toxic_logprobs)
@@ -383,7 +390,9 @@ class Trainer:
                 columns=["preferred", "rejected"])
         }
 
-        print(f'METRICS: {metrics}')
+        logger.info(f'METRICS: {metrics}')
+
+        wandb.log(metrics, step=self._global_step_count)
 
         return losses.mean(), metrics
 
@@ -402,14 +411,14 @@ class Trainer:
         else: # IPO
             losses = (logits - 1.0/(2.0 * self.po_beta)) ** 2
 
-        chosen_rewards = self.po_beta * (policy_chosen_logps - reference_chosen_logps).detach()
-        rejected_rewards = self.po_beta * (policy_rejected_logps - reference_rejected_logps).detach()
+        chosen_rewards = self.po_beta * (policy_chosen_logps - reference_chosen_logps).detach().cpu()
+        rejected_rewards = self.po_beta * (policy_rejected_logps - reference_rejected_logps).detach().cpu()
 
         return losses, chosen_rewards, rejected_rewards
 
 @app.command()
 def train_defender(
-    save_dir: str = 'models',
+    save_dir: str = 'output',
     save_name: str = typer.Argument(...),
     attacker: Attackers = Attackers.gpt2,
     baseline: ModelName = ModelName.gpt2,
@@ -422,7 +431,7 @@ def train_defender(
     batch_size: int = typer.Option(8, help="Batch size for training the defender model"), # 8
     learning_rate: float = typer.Option(5e-7, help="Learning rate for the defender model"),
     warmup_steps: int = typer.Option(150, help="Number of warmup steps for the learning rate scheduler"),
-    rollouts_per_epoch: int = typer.Option(128, help="Number of rollouts to generate per epoch"), # 256
+    rollouts_per_epoch: int = typer.Option(64, help="Number of rollouts to generate per epoch"), # 256
     seed: int = typer.Option(42, help="Random seed for reproducibility"),
     turn_order: Annotated[List[str], typer.Option(help="Turn order for the rollout")] = ["atk", "def", "atk", "def", "atk", "def"],
     max_new_tokens: int = typer.Option(24, help="Maximum number of tokens to generate in a single rollout"),
@@ -467,7 +476,7 @@ def train_defender(
         "baseline": baseline,
         "defender": defender,
         "epochs": epochs,
-        "wandb": wandb,
+        "enable_wandb": enable_wandb,
         "po_method": po_method,
         "po_beta": po_beta,
         "dpo_label_smooth": dpo_label_smooth,
@@ -481,11 +490,17 @@ def train_defender(
         "min_new_tokens": min_new_tokens,
         "repetition_penalty": repetition_penalty,
         "temperature": temperature,
-        "dev_eval_interval": dev_eval_interval
+        "dev_eval_interval": dev_eval_interval,
+        "hostname": os.uname().nodename
     }
 
     with open(output_dir / "config.json", "w") as f:
         json.dump(config, f, indent=4)
+
+    
+    # Initialize Wandb
+    if enable_wandb:
+        wandb.init(project="AST Defener Hardening", config=config)
 
     # Set the seed
     random.seed(seed)
@@ -525,10 +540,6 @@ def train_defender(
 
     # Initialize best model
     best_model = float('inf')
-
-    # Initialize Wandb
-    if enable_wandb:
-        wandb.init(project="AST Defener Hardening", config=config)
 
     epoch = 0
     while epoch < epochs:
@@ -603,6 +614,11 @@ def train_defender(
                 "dev/avg_baseline_response_toxicity": baseline_toxicity
             }, step=trainer._global_step_count)
 
+            wandb.log({
+                "dev/avg_defender_response_toxicity": defender_toxicity,
+                "dev/avg_baseline_response_toxicity": baseline_toxicity
+            }, step=epoch)
+
             typer.echo(f"Completed dev set evaluation")
             typer.echo(f"Average defender response toxicity: {defender_toxicity:.4f}")
             typer.echo(f"Average baseline response toxicity: {baseline_toxicity:.4f}")
@@ -613,7 +629,7 @@ def train_defender(
                 best_model = defender_toxicity
                 trainer.save("best")
 
-            epoch += 1
+        epoch += 1
 
 
 
