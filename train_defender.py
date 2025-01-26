@@ -116,6 +116,7 @@ class Trainer:
                  max_gradient_norm: float = 10.0,
                  warmup_steps: int = 150,
                  save_dir: str = 'output',
+                 save_name: str = 'model',
                  turn_order: list = ["atk", "def", "atk", "def", "atk", "def"],
                  max_new_tokens: int = 24,
                  min_new_tokens: int = 2,
@@ -201,6 +202,7 @@ class Trainer:
             wandb.watch(self.defender.model)
 
         self.save_dir = save_dir
+        self.save_name = save_name
 
         self._global_step_count = 0
 
@@ -216,7 +218,7 @@ class Trainer:
         Save the defender model
         """
 
-        filename = self.save_dir + "/model_" + suffix if suffix is not None else str(self._global_step_count)
+        filename = self.save_dir + f"/{self.save_name}_" + suffix if suffix is not None else str(self._global_step_count)
 
         self.defender.model.save_pretrained(filename)
         self.defender.tokenizer.save_pretrained(filename)
@@ -302,7 +304,7 @@ class Trainer:
         
         # Lower toxicity score is better so we negate the toxicity score
         # Assumes input is just a plain string
-        return -call_detoxify(text)["toxicity"]
+        return 1.0-call_detoxify(text)["toxicity"]
 
     def prepare_data(self, rollouts, batch_size: int = 1):
         """
@@ -328,6 +330,9 @@ class Trainer:
 
             loss, metrics = self._step(batch, log_step=(i % log_interval == 0))
 
+            if not torch.isnan(loss):
+                self.accelerator.backward(loss)
+
             gn = clip_grad_norm_(self.defender.model.parameters(), self.max_gradient_norm).cpu().item()
 
             metrics["training/gradient_norm"] = gn
@@ -349,6 +354,9 @@ class Trainer:
         """        
 
         toxic_text, nontoxic_text, _, _ = batch
+        
+        print(f'Toxic text: {toxic_text[0]}')
+        print(f'Nontoxic text: {nontoxic_text[0]}')
 
         # TODO: Discuss the win/loss defender/attacker terminology with Jack
 
@@ -386,7 +394,7 @@ class Trainer:
             "ref/logprobs_preferred": baseline_nontoxic_logprobs.mean().detach().cpu().item(),
             "ref/logprobs_rejected": baseline_toxic_logprobs.mean().detach().cpu().item(),
             "training/loss": losses.mean().detach().cpu().item(),
-            "debug/text": wandb.Table(data=list(zip(toxic_text, nontoxic_text)), 
+            "debug/text": wandb.Table(data=list(zip(nontoxic_text, toxic_text)), 
                 columns=["preferred", "rejected"])
         }
 
@@ -411,10 +419,10 @@ class Trainer:
         else: # IPO
             losses = (logits - 1.0/(2.0 * self.po_beta)) ** 2
 
-        chosen_rewards = self.po_beta * (policy_chosen_logps - reference_chosen_logps).detach().cpu()
+        preferred_rewards = self.po_beta * (policy_chosen_logps - reference_chosen_logps).detach().cpu()
         rejected_rewards = self.po_beta * (policy_rejected_logps - reference_rejected_logps).detach().cpu()
 
-        return losses, chosen_rewards, rejected_rewards
+        return losses, preferred_rewards, rejected_rewards
 
 @app.command()
 def train_defender(
@@ -531,6 +539,7 @@ def train_defender(
         learning_rate=learning_rate, 
         warmup_steps=warmup_steps,
         save_dir=save_dir,
+        save_name=save_name,
         turn_order=turn_order,
         max_new_tokens=max_new_tokens,
         min_new_tokens=min_new_tokens,
@@ -541,15 +550,14 @@ def train_defender(
     # Initialize best model
     best_model = float('inf')
 
-    epoch = 0
-    while epoch < epochs:
-        typer.echo(f"Epoch {epoch}")
+    while trainer._global_step_count < epochs:
+        typer.echo(f"Epoch {trainer._global_step_count}")
 
         train_rollouts = []
         _cntr = 0
         while len(train_rollouts) < rollouts_per_epoch:
             if _cntr % batch_size == 0:
-                typer.echo(f"Step {epoch}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
+                typer.echo(f"Step {trainer._global_step_count}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
 
             # Randomply sample propmts from the training set
             prompt = random.choice(train_prompts)
@@ -562,7 +570,7 @@ def train_defender(
                 train_rollouts.append(rollout)
 
             _cntr += 1
-        typer.echo(f"Step {epoch}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
+        typer.echo(f"Step {trainer._global_step_count}: Collected {len(train_rollouts)} of {rollouts_per_epoch} rollouts")
 
         # Prepare dataset of generated rollouts
         dataset = trainer.prepare_data(train_rollouts, batch_size=batch_size)
@@ -572,10 +580,10 @@ def train_defender(
         trainer.epoch(dataset, log_interval=10)
 
         # Save model
-        trainer.save(str(epoch))
+        trainer.save(str(trainer._global_step_count))
 
         # Run dev set evaluation 
-        if epoch % dev_eval_interval == 0:
+        if trainer._global_step_count % dev_eval_interval == 0:
             typer.echo(f"Running dev set evaluation on {len(dev_prompts)} prompts")
             
             dev_conversations = []
@@ -617,7 +625,7 @@ def train_defender(
             wandb.log({
                 "dev/avg_defender_response_toxicity": defender_toxicity,
                 "dev/avg_baseline_response_toxicity": baseline_toxicity
-            }, step=epoch)
+            }, step=trainer._global_step_count)
 
             typer.echo(f"Completed dev set evaluation")
             typer.echo(f"Average defender response toxicity: {defender_toxicity:.4f}")
@@ -628,9 +636,6 @@ def train_defender(
 
                 best_model = defender_toxicity
                 trainer.save("best")
-
-        epoch += 1
-
 
 
 if __name__ == "__main__":
