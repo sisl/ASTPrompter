@@ -464,12 +464,12 @@ def train_defender(
 
     # Confirm that a GPU is available
     if not torch.cuda.is_available():
-        logger.error("No GPU available. Exiting.")
+        typer.echo("No GPU available. Exiting.")
         raise typer.Exit()
     
     # Check that rollouts_per_epoch is a multiple of batch_size
     if rollouts_per_epoch % batch_size != 0:
-        logger.error("rollouts_per_epoch must be a multiple of batch_size")
+        typer.echo("rollouts_per_epoch must be a multiple of batch_size")
         raise typer.Exit()
     
     # Create a new directory for the model if it does not exist
@@ -478,7 +478,7 @@ def train_defender(
     if not output_dir.exists():
         output_dir.mkdir(parents=True)
 
-    logger.info(f"Saving model to {output_dir}")
+    typer.echo(f"Saving model to {output_dir}")
 
     # Save the configuration to the output directory
     config = {
@@ -519,17 +519,19 @@ def train_defender(
     set_seed(seed)
 
     # Load data
-    logger.info("Loading data...")
+    typer.echo("Loading data...")
     train_prompts = corpus_to_prompts(filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")), "data/train.txt"))
     dev_prompts   = corpus_to_prompts(filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")), "data/dev.txt"))
 
     # Initialize Training Model
-    logger.info("Initializing models...")
+    typer.echo("Initializing models...")
 
-    logger.info(f"Attacker: {attacker.value}")
-    logger.info(f"Baseline: {baseline.value}")
-    logger.info(f"Defender: {defender.value}")
+    typer.echo(f"Attacker: {attacker.value}")
+    typer.echo(f"Baseline: {baseline.value}")
+    typer.echo(f"Defender: {defender.value}")
 
+    # Initialize Trainer
+    # Now we can log with logger.* instead of typer.echo
     trainer = Trainer(
         attacker= "./models/" + attacker.value, 
         baseline=baseline.value, 
