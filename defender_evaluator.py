@@ -303,7 +303,7 @@ class BadEvaluator:
 
         # Generate two rollouts first expected to be toxic, second expected to be nontoxic
         baseline_conversation = self._generate_rollout(self.attacker, self.baseline, prompt)
-        defender_convseration = self._generate_rollout(self.baseline, self.defender, prompt)
+        defender_convseration = self._generate_rollout(self.attacker, self.defender, prompt)
 
         # Score each of the rollouts
         baseline_toxicity = float(call_detoxify(get_text_from_conversation(baseline_conversation))["toxicity"])
