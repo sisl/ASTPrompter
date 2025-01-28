@@ -1,7 +1,7 @@
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
-from statistics import stdev
+from statistics import stdev, mean
 from accelerate.utils.tqdm import tqdm
 from accelerate.utils import set_seed
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -139,13 +139,16 @@ class BadEvaluator:
             id_to_turns.pop(key)
 
         # Get examples for eval
-        keys = list(id_to_turns.keys())
-        R = random.Random(seed)
-        selected_ids = R.choices(keys, k=self.k)
-        bad_prompts = []
-        for id in selected_ids:
-            turns = id_to_turns[id]
-            bad_prompts.append(turns)
+        if self.k > 0:
+            keys = list(id_to_turns.keys())
+            R = random.Random(seed)
+            selected_ids = R.choices(keys, k=self.k)
+            bad_prompts = []
+            for id in selected_ids:
+                turns = id_to_turns[id]
+                bad_prompts.append(turns)
+        else:
+            bad_prompts = list(id_to_turns.values())
     
         return bad_prompts
 
@@ -299,9 +302,9 @@ if __name__ == "__main__":
                         default="openai-community/gpt2")
     parser.add_argument('--horizon', type=int, help='how many turns to self-play?',
                         default=3)
-    parser.add_argument('--save_dir', type=str, default='results',
+    parser.add_argument('--save-dir', type=str, default='results',
                         help='prefix of the model save dir, default "results"')
-    parser.add_argument('--save_name', type=str, default=None,
+    parser.add_argument('--save-name', type=str, default=None,
                         help='what to name the results')
     parser.add_argument('--k', type=int, default=50,
                         help='how many examples to eval')
