@@ -1,7 +1,6 @@
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
 from accelerate import Accelerator
-from accelerate.state import AcceleratorState
 from accelerate.utils.tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.optim.lr_scheduler import LambdaLR
@@ -9,14 +8,13 @@ from torch.optim import AdamW
 import torch.nn.functional as F
 from lm import *
 from peft import LoraConfig
-from environment import *
+from environmentRoll2 import *
 import torch
 from torch.nn.utils import clip_grad_norm_
 import os
 import wandb
 import json
 from accelerate.state import PartialState
-from torch.cuda.amp import autocast
 
 logger = get_logger("ast")
 
@@ -30,10 +28,6 @@ class Trainer:
         # initialize early the accelator
         self.accelerator = Accelerator(**kwargs.get("accelerator_kwargs", {}),
                                        log_with="wandb" if args.wandb else None)
-
-        if args.deepspeed:
-            AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.batch_size
-
         if args.wandb:
             self.accelerator.init_trackers(
                 project_name="ast", 
@@ -47,65 +41,37 @@ class Trainer:
         # just use it in our inference wrapper
 
         self.adversary = LanguageModel(dont_init=True)
-        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}), torch_dtype=torch.bfloat16)
-        self.adversary.model.gradient_checkpointing_enable()
+        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
-        if args.defense == args.baseline:
-            # freeze a copy of the model and initialize both defense and train with it to save space
-            frozen_model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}), torch_dtype=torch.bfloat16)
-            frozen_tokenizer = AutoTokenizer.from_pretrained(args.adversary)
-            frozen_model = frozen_model.to("cuda:1")
+        # our defender can be initialized normally 
+        # and immeditaley frozen
+        self.defender = LanguageModel(args.defense,
+                                      model_load_params=kwargs.get("model_load_params", {}))
+        self.defender.model.eval()
+        self.baseline = LanguageModel(args.baseline,
+                                      model_load_params=kwargs.get("model_load_params", {}))
+        self.baseline.model.eval()
 
-            self.defender = LanguageModel(dont_init=True)
-            self.defender.model = frozen_model
-            self.defender.tokenizer = frozen_tokenizer
-
-            self.baseline = LanguageModel(dont_init=True)
-            self.baseline.model = frozen_model
-            self.baseline.tokenizer = frozen_tokenizer
-
-            self.defender.model.eval()
-            self.baseline.model.eval()
-        else:
-            # our defender can be initialized normally 
-            # and immeditaley frozen
-            self.defender = LanguageModel(args.defense,
-                                          model_load_params=kwargs.get("model_load_params", {}),
-                                          torch_dtype=torch.bfloat16)
-            self.defender.model.eval()
-            self.baseline = LanguageModel(args.baseline,
-                                          model_load_params=kwargs.get("model_load_params", {}),
-                                          torch_dtype=torch.bfloat16)
-            self.baseline.model.eval()
-
-            (self.defender.model, self.baseline.model) = self.defender.to("cuda:1"), self.baseline.to("cuda:1")
 
         # GPT 2 doesn't have a padding token, so we add it
-        if "gpt2" in args.adversary:
-            self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
-            self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
-
-        if "gpt2" in args.defense:
-            self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
-            self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
-
-        if "gpt2" in args.baseline:
-            self.baseline.tokenizer.pad_token = self.baseline.tokenizer.eos_token
-            self.baseline.tokenizer.pad_token_id = self.baseline.tokenizer.eos_token_id
+        self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
+        self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
+        self.baseline.tokenizer.pad_token = self.baseline.tokenizer.eos_token
+        self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
+        self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
+        self.baseline.tokenizer.pad_token_id = self.baseline.tokenizer.eos_token_id
 
         # all the mishmash to get
         self.beta = args.beta
         optimizer = AdamW(self.adversary.model.parameters(), lr=args.lr)
         scheduler = LambdaLR(optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / (args.warmup_steps + 1)))
 
-
         # because the accelerator may move models to weird places, we 
         # account for that
-        (self.adversary.model,
-         self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model,
-                                                                    optimizer, scheduler)
-
+        (self.adversary.model, self.defender.model,
+         self.baseline.model, self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model, self.defender.model,
+                                                                                         self.baseline.model, optimizer, scheduler)
         if args.wandb:
             wandb.watch(self.adversary.model)
 
@@ -116,10 +82,6 @@ class Trainer:
         self.args = args
 
         self.global_step_counter_ = 0
-
-    @property
-    def device(self):
-        return self.accelerator.device
 
     @classmethod
     def warm_start(cls, args, state_path, **kwargs):
@@ -156,14 +118,7 @@ class Trainer:
 
         trainer = cls(args, **kwargs)
         trainer.global_step_counter_ = state["steps"]
-
-        if args.deepspeed:
-            actual_models = trainer.accelerator._models
-            trainer.accelerator._models = [model for model in actual_models
-                                        if model.checkpoint_engine is not None]
         trainer.accelerator.load_state(state_path)
-        if args.deepspeed:
-            trainer.accelerator._models = actual_models
 
         return trainer, dict(state["train_state"])
    
@@ -186,18 +141,7 @@ class Trainer:
             self.adversary.tokenizer.save_pretrained(savedir)
         else:
             arguments = vars(self.args)
-
-            # we do this weird save because if we don't actually initalize
-            # the frozen models through prepare, accelerate is really angry about it
-            # during save because it tries to save nonexistant models
-            if self.args.deepspeed:
-                actual_models = self.accelerator._models
-                self.accelerator._models = [model for model in actual_models
-                                            if model.checkpoint_engine is not None]
             self.accelerator.save_state(savedir, safe_serialization=False)
-            if self.args.deepspeed:
-                self.accelerator._models = actual_models
-
             with open(os.path.join(savedir, "meta.json"), 'w') as df:
                 json.dump({
                     "arguments": arguments,
@@ -239,7 +183,7 @@ class Trainer:
         return self.accelerator.prepare(dl)
 
     def play(self, prompt):
-        return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], 
+        return episode_paired_sparseSample(self.adversary, self.defender, [i+" " for i in prompt], 
                 self.horizon, difference_threshold=self.args.threshold, 
                               reward_options={"ast_ppl_weight": self.args.ast_ppl_weight})
 
@@ -270,24 +214,25 @@ class Trainer:
             how often to log to wandb
         """
         
-        with autocast(dtype=torch.bfloat16):
-            for i, batch in enumerate(iter(dataloader)):
-                loss, metrics = self.step(batch, log=(i % log_every == 0))
-                loss = loss / self.args.accumulate_steps
-                if not torch.isnan(loss):
-                    self.accelerator.backward(loss)
+        for i, batch in enumerate(iter(dataloader)):
+            loss, metrics = self.step(batch, log=(i % log_every == 0))
+            loss = loss / self.args.accumulate_steps
+            if not torch.isnan(loss):
+                self.accelerator.backward(loss)
 
-                if (i % self.args.accumulate_steps) == 0:
-                    self.optimizer.step()
-                    self.scheduler.step()
-                    self.optimizer.zero_grad()
+            if (i % self.args.accumulate_steps) == 0:
+                gn = clip_grad_norm_(self.adversary.model.parameters(), self.args.max_gradient_norm).cpu().item()
+                metrics["training/gradient_norm"] = gn
+                self.optimizer.step()
+                self.scheduler.step()
+                self.optimizer.zero_grad()
 
-                if (i % log_every == 0):
-                    metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
-                    self.accelerator.log(metrics, step=self.global_step_counter_)
-                    logger.info(f"MARGIN {round(metrics['rewards/reward_margin'],5)} and LOSS {round(metrics['training/loss'],2)} in STEP {self.global_step_counter_}/{self.args.total_steps}")
+            if (i % log_every == 0):
+                metrics["training/lr"] = self.optimizer.param_groups[0]["lr"]
+                self.accelerator.log(metrics, step=self.global_step_counter_)
+                logger.info(f"MARGIN {round(metrics['rewards/reward_margin'],5)} and LOSS {round(metrics['training/loss'],2)} in STEP {self.global_step_counter_}/{self.args.total_steps}")
 
-                self.global_step_counter_ += 1
+            self.global_step_counter_ += 1
 
     def finish(self):
         self.accelerator.end_training()
@@ -328,16 +273,16 @@ class Trainer:
         # we need to individualy calculate the logprobs of wins and loses
         # for both our adversarial model + defender model
         with torch.inference_mode():
-            defender_logprobs_win = self.baseline.logprob_batched(combined_wins, "cuda:1")
-            defender_logprobs_loss = self.baseline.logprob_batched(combined_loses, "cuda:1")
+            defender_logprobs_win = self.baseline.logprob_batched(combined_wins, self.accelerator.device)
+            defender_logprobs_loss = self.baseline.logprob_batched(combined_loses, self.accelerator.device)
         adversary_logprobs_win = self.adversary.logprob_batched(combined_wins, self.accelerator.device) 
         adversary_logprobs_loss = self.adversary.logprob_batched(combined_loses, self.accelerator.device) 
 
         # yipee
-        loses, chosen_rewards, rejected_rewards = self.__loss(adversary_logprobs_win.to("cuda:1"),
-                                                              adversary_logprobs_loss.to("cuda:1"),
-                                                              defender_logprobs_win.to("cuda:1"),
-                                                              defender_logprobs_loss.to("cuda:1"))
+        loses, chosen_rewards, rejected_rewards = self.__loss(adversary_logprobs_win,
+                                                              adversary_logprobs_loss,
+                                                              defender_logprobs_win,
+                                                              defender_logprobs_loss)
         reward_accuracies = (chosen_rewards > rejected_rewards).float()
 
         if torch.isnan(loses.mean()):
@@ -357,7 +302,7 @@ class Trainer:
                 columns=["chosen", "rejected"])
         }
 
-        return loses.mean().to(self.accelerator.device), metrics
+        return loses.mean(), metrics
 
 #         combined_wins, combined_loses
 
