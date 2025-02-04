@@ -8,7 +8,7 @@ from torch.optim import AdamW
 import torch.nn.functional as F
 from lm import *
 from peft import LoraConfig
-from environment import *
+from environmentRoll2 import *
 import torch
 from torch.nn.utils import clip_grad_norm_
 import os
@@ -183,7 +183,7 @@ class Trainer:
         return self.accelerator.prepare(dl)
 
     def play(self, prompt):
-        return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], 
+        return episode_paired_sparseSample(self.adversary, self.defender, [i+" " for i in prompt], 
                 self.horizon, difference_threshold=self.args.threshold, 
                               reward_options={"ast_ppl_weight": self.args.ast_ppl_weight})
 
