@@ -9,7 +9,7 @@ from torch.optim import AdamW
 import torch.nn.functional as F
 from lm import *
 from peft import LoraConfig
-from environment import *
+from environmentRoll2 import *
 import torch
 from torch.nn.utils import clip_grad_norm_
 import os
