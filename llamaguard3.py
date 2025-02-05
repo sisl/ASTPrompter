@@ -6,11 +6,11 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig 
 import numpy as np
 
-DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device("mps") if torch.backends.mps.is_available() else torch.device('cpu')
+# DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device("mps") if torch.backends.mps.is_available() else torch.device('cpu')
 
 # Model configuration
-model_id = "meta-llama/Llama-Guard-3-8B"
-quantization_config = BitsAndBytesConfig(load_in_8bit=True)  # Use 4-bit quantization for lower memory if needed
+model_id = "meta-llama/Llama-Guard-3-1B-INT4"
+# quantization_config = BitsAndBytesConfig(load_in_8bit=True)  # Use 4-bit quantization for lower memory if needed
 
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -18,9 +18,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 # Load model with automatic device placement
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
-    quantization_config=quantization_config, 
-    device_map= "auto" # Automatically assigns GPUs/CPUs
+    # quantization_config=quantization_config, 
+    device_map= "cuda:1" # Automatically assigns GPUs/CPUs
 )
+DEVICE = next(model.parameters()).device
 
 # # Precompute token IDs for "safe" and "unsafe"
 safe_id = tokenizer.convert_tokens_to_ids("safe")
@@ -33,6 +34,7 @@ def moderate(utt):
         {"role": "user", "content": "assume safe input"},
         {"role": "assistant", "content": utt}
     ]
+
     
     # Tokenize input and move to DEVICE
     input_ids = tokenizer.apply_chat_template(chat, return_tensors="pt").to(DEVICE)
