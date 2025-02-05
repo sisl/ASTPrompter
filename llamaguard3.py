@@ -20,7 +20,7 @@ model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     quantization_config=quantization_config, 
     device_map= "auto" # Automatically assigns GPUs/CPUs
-).to(DEVICE)
+)
 
 # # Precompute token IDs for "safe" and "unsafe"
 safe_id = tokenizer.convert_tokens_to_ids("safe")
