@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
     # SFT model will be adversary
     adversary = LanguageModel(dont_init=True)
-    adversary.model = AutoModelForCausalLM.from_pretrained(args.weights)
+    adversary.model = AutoModelForCausalLM.from_pretrained(args.weights, torch_dtype=torch.bfloat16)
     adversary.tokenizer = AutoTokenizer.from_pretrained(args.weights)
     
     # Init defender
@@ -84,9 +84,9 @@ if __name__ == "__main__":
     # defender.model.eval()
     
     # GPT 2 doesn't have a padding token, so we add it
-    # adversary.tokenizer.pad_token = adversary.tokenizer.eos_token
+    adversary.tokenizer.pad_token = adversary.tokenizer.eos_token
     # defender.tokenizer.pad_token = defender.tokenizer.eos_token
-    # adversary.tokenizer.pad_token_id = adversary.tokenizer.eos_token_id
+    adversary.tokenizer.pad_token_id = adversary.tokenizer.eos_token_id
     # defender.tokenizer.pad_token_id = defender.tokenizer.eos_token_id
     
     # Optimizer and scheduler
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         num_train_epochs=20,
         max_steps=10000,
         per_device_train_batch_size=8,
-        load_best_model_at_end=True
+        # load_best_model_at_end=True
     )
 
     trainer = Trainer(

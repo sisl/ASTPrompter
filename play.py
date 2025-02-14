@@ -8,7 +8,7 @@ from environment import episode
 import torch
 import random
 
-checkpoint = "./models/llama_v_llama_largerlr_best"
+checkpoint = "./models/llama_v_llama_largerlr_smallerpplweight_best"
 # checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-16000"
 # checkpoint = "/home/houjun/FineGrainedLLMDetox/sft_out/checkpoint-500"
 base = "meta-llama/Llama-3.1-8B"

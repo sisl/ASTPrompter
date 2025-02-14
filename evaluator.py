@@ -43,9 +43,9 @@ class Evaluator:
         self.defender.model.eval()
 
         # GPT 2 doesn't have a padding token, so we add it
-        self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
+        # self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
         # self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
-        self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
+        # self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
         # self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
 
         # because the accelerator may move models to weird places, we 
