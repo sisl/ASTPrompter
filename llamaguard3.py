@@ -21,7 +21,6 @@ model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat1
 device_map = infer_auto_device_map(model, max_memory={0: "0GiB", 1: "10GiB", 2: "10GiB"})
 
 # use the device map above
-model.to_device_map(device_map)
 model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map=device_map)
 
 model.eval()
