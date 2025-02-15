@@ -7,6 +7,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import numpy as np
 
 from accelerate.inference import prepare_pippy
+from accelerate import infer_auto_device_map
 
 # Model configuration
 model_id = "meta-llama/Llama-Guard-3-8B"
@@ -16,9 +17,13 @@ model_id = "meta-llama/Llama-Guard-3-8B"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Load model with automatic device placement
-model = AutoModelForCausalLM.from_pretrained(model_id,
-                                             torch_dtype=torch.bfloat16,
-                                             device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16)
+device_map = infer_auto_device_map(model, max_memory={0: "0GiB", 1: "10GiB", 2: "10GiB"})
+
+# use the device map above
+model.to_device_map(device_map)
+model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map=device_map)
+
 model.eval()
 
 # Precompute token IDs for "safe" and "unsafe"
