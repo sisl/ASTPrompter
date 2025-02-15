@@ -102,9 +102,7 @@ class Trainer:
 
         # because the accelerator may move models to weird places, we 
         # account for that
-        (self.adversary.model,
-         self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model,
-                                                                    optimizer, scheduler)
+        (self.adversary.model, self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model, optimizer, scheduler)
 
         if args.wandb:
             wandb.watch(self.adversary.model)

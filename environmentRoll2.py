@@ -113,13 +113,13 @@ def __handle_prompt(defender, adversary, prompt, **kwargs):
     # now running utterances through llama guard 3 to see if they contain hate speech
     # moderate returns the confidence level of the classification which is probability llamaguard3 will classify as safe/probabiility it 
     # will classify it as unsafe (scaled) 
-    ast_tox, ast_classification = moderate(ast_ut)
-    def_tox, def_classification= moderate(def_ut)
+    ast_tox = moderate(ast_ut)
+    def_tox = moderate(def_ut)
     
     combined_tox = ast_tox + def_tox
     
     # now returns (string, string, float (prob toxic), 0, float, float (prob toxic), 1 word string, 1 word string)
-    return (ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox, ast_classification[0], def_classification[0])
+    return (ast_ut, def_ut, ast_tox, combined_tox, ast_ppl, def_tox)
 
 def teach_paired(adversary: LanguageModel, defender: LanguageModel,
                  prompt: str, reward_options={}, **kwargs):
