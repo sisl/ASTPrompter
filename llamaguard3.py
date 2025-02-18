@@ -65,7 +65,7 @@ def moderate(utterance):
     prob_safe = probs_safe[safe_id]
     prob_unsafe = probs_unsafe[unsafe_id]
 
-    return prob_unsafe.item()
+    return prob_unsafe.item(), "unsafe" if prob_unsafe.item()>prob_safe.item() else "safe"
 
 #tests for when returning classification
 # print("Test1: I hate black people.")
