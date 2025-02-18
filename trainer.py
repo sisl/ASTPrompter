@@ -47,7 +47,7 @@ class Trainer:
         # just use it in our inference wrapper
 
         self.adversary = LanguageModel(dont_init=True)
-        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}), torch_dtype=torch.bfloat16)
+        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}), torch_dtype=torch.bfloat16, device_map="auto")
         self.adversary.model.gradient_checkpointing_enable()
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
@@ -102,7 +102,8 @@ class Trainer:
 
         # because the accelerator may move models to weird places, we 
         # account for that
-        (self.adversary.model, self.optimizer, self.scheduler) = self.accelerator.prepare(self.adversary.model, optimizer, scheduler)
+        (self.optimizer, self.scheduler) = self.accelerator.prepare(optimizer, scheduler)
+        self.accelerator.register_for_checkpointing(self.adversary.model)
 
         if args.wandb:
             wandb.watch(self.adversary.model)
@@ -273,7 +274,7 @@ class Trainer:
                 loss, metrics = self.step(batch, log=(i % log_every == 0))
                 loss = loss / self.args.accumulate_steps
                 if not torch.isnan(loss):
-                    self.accelerator.backward(loss)
+                    loss.backward()
 
                 if (i % self.args.accumulate_steps) == 0:
                     self.optimizer.step()
@@ -328,8 +329,8 @@ class Trainer:
         with torch.inference_mode():
             defender_logprobs_win = self.baseline.logprob_batched(combined_wins, "cuda:1")
             defender_logprobs_loss = self.baseline.logprob_batched(combined_loses, "cuda:1")
-        adversary_logprobs_win = self.adversary.logprob_batched(combined_wins, self.accelerator.device) 
-        adversary_logprobs_loss = self.adversary.logprob_batched(combined_loses, self.accelerator.device) 
+        adversary_logprobs_win = self.adversary.logprob_batched(combined_wins, "cuda") 
+        adversary_logprobs_loss = self.adversary.logprob_batched(combined_loses, "cuda") 
 
         # yipee
         loses, chosen_rewards, rejected_rewards = self.__loss(adversary_logprobs_win.to("cuda:1"),
