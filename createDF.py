@@ -12,12 +12,12 @@ import pandas as pd
 import numpy as np
 
 
-def createCSVGPT():
+def createCSVGPT(weights):
     # adversarial model weights loaded
     #weights = "/home/allie11/ASTPrompter/models/BaseGPT2_nobp_newR_3t_best"
     #weights = "/home/allie11/ASTPrompter/models/NewMethod0.5_5t_44268S_best"
     #weights = "/home/allie11/ASTPrompter/models/gpt2New_.5_3H_best"
-    weights = "/home/allie11/ASTPrompter/models/NewBaselineGPT_5t_LG_best"
+    #weights = "/home/allie11/ASTPrompter/models/NewBaselineGPT_5t_LG_best"
     #weights = "/home/allie11/ASTPrompter/models/bigLlama0.5_lowerlr_best"
     adversary = LanguageModel(dont_init=True)
     adversary.model = AutoModelForCausalLM.from_pretrained(weights, torch_dtype=torch.bfloat16)
@@ -88,9 +88,7 @@ def createCSVGPT():
         
     df.to_csv("gpt.csv")
     
-def createCSVLlama():
-    # Load adversarial model (LLaMA with fine-tuned weights)
-    weights = "/home/allie11/ASTPrompter/models/bigLlama0.5_lowerlr_best"
+def createCSVLlama(weights):
     adversary = LanguageModel(dont_init=True)
     adversary.model = AutoModelForCausalLM.from_pretrained(weights, torch_dtype=torch.bfloat16).cuda()
     adversary.tokenizer = AutoTokenizer.from_pretrained(weights)
@@ -128,15 +126,17 @@ def createCSVLlama():
                for i in convos]
     prompts = [[j + " " for j in i if j.strip() != ""] for i in prompts]
     prompts = [i for i in prompts if len(i) != 0]
+    
+    prompts = prompts[:10]
 
     # Loop through non-toxic prompts
     for prompt in prompts:
-        # print("==== PROMPT ====")
-        # print(prompt)
+        print("==== PROMPT ====")
+        print(prompt)
 
         # Run conversation episodes
         convo = episode(adversary, defender, prompt, horizon=8, return_sequence=True)
-        #print("".join(f"[{i}] " for i in convo))
+        print("".join(f"[{i}] " for i in convo))
 
         # Remove prompt portion from the conversation output
         convo = convo[len(prompt):]
@@ -152,8 +152,9 @@ def createCSVLlama():
         df = pd.concat([df, row_df], ignore_index=True)
 
     # Save conversation trajectories
-    df.to_csv("NewLlamaTs.csv", index=False)
+    df.to_csv("test2LLama.csv", index=False)
     print("Saved to NewLlamaTs.csv")
 
-
-createCSVLlama()
+if __name__ =="__main__":
+    # call function - give model weights as input
+    createCSVLlama(weights = "/home/allie11/ASTPrompter/models/bigLlama0.5_lowerlr_best")

@@ -17,20 +17,6 @@ from bertopic import BERTopic
 import os
 from llamaguard3 import moderate 
 
-# set folder to output csv files to
-output_folder = "Llama3TNewMethod"
-os.makedirs(output_folder, exist_ok=True)
-# download NLTK stopwords and punctuation
-nltk.download("stopwords")
-nltk.download("punkt")
-# import pre-processed nlp model trained for pre-processing text
-nlp = spacy.load("en_core_web_lg")
-
-# read in csv of conversation rollouts as a pandas dataframe
-#df = pd.read_csv("/home/allie11/ASTPrompter/DataFrames/Baseline/BigBaselineNewR.csv") 
-#df = pd.read_csv("/home/allie11/ASTPrompter/5TBigBaseline.csv")
-#df = pd.read_csv("/home/allie11/ASTPrompter/Dataframe New Method/BigNewMethod.csv") 
-df = pd.read_csv("/home/allie11/ASTPrompter/NewLlamaTs.csv") 
 
 # Preprocess text (Tokenize, Remove Stopwords & Punctuation)
 stop_words = set(stopwords.words("english"))
@@ -86,9 +72,9 @@ def ldaWholeConvo(df):
     result_df = pd.concat([df, topic_df], axis=1)
 
     # Save results to csv
-    result_df.to_csv(os.path.join(output_folder,"NewLlama_lda_full_w_topics.csv"), index=False)
+    result_df.to_csv(os.path.join(output_folder,output_file+"_lda_full_w_topics.csv"), index=False)
     #topic_df.to_csv("BigNewMethod_topicDistrib.csv", index = False)
-    foundTopics_df.to_csv(os.path.join(output_folder,"NewLlama_lda_full_topics.csv"), index=False)
+    foundTopics_df.to_csv(os.path.join(output_folder,output_file+"_lda_full_topics.csv"), index=False)
 
 def ldaPerCol(df):
     # Initialize storage for topic distributions
@@ -126,13 +112,13 @@ def ldaPerCol(df):
     # Convert topic distributions to a DataFrame
     if topic_distributions:
         topic_df = pd.DataFrame(topic_distributions)
-        topic_df.to_csv(os.path.join(output_folder,"NewLlama_lda_w_topics_per_column.csv"), index=False)
+        topic_df.to_csv(os.path.join(output_folder,output_file+"_lda_w_topics_per_column.csv"), index=False)
     else:
         print("No valid topics were extracted. Check the input data.")
 
     if topicsPerCol:
         topicsPerCol_df = pd.DataFrame(topicsPerCol)
-        topicsPerCol_df.to_csv(os.path.join(output_folder,"NewLlama_lda_topics_per_column*.csv"), index=False)
+        topicsPerCol_df.to_csv(os.path.join(output_folder,output_file+"_lda_topics_per_column*.csv"), index=False)
 
 def bertTopicWholeConvo(df):
     # code for this function referenced heavily from: https://colab.research.google.com/drive/1BoQ_vakEVtojsd2x_U6-_x52OOuqruj2?usp=sharing#scrollTo=Fo-Oig4Yib5K
@@ -184,14 +170,14 @@ def bertTopicWholeConvo(df):
     
     # Get topic information as a DataFrame
     topic_info_df = topic_model.get_topic_info()
-    topic_info_df.to_csv(os.path.join(output_folder,"NewLlama_BERTTopic_full_Topics.csv"), index=False)
+    topic_info_df.to_csv(os.path.join(output_folder,output_file+"_BERTTopic_full_Topics.csv"), index=False)
 
     # Assign topics to original conversations
     df["Assigned_Topic"] = [topics[i] for i in range(len(convos))]  # Map sentence topics back to convos
     df["Topic_Probability"] = [probs[i] for i in range(len(convos))]
 
     # Save conversation assignments
-    df.to_csv(os.path.join(output_folder,"NewLama_BERTTopic_full_AssignedTopics.csv"), index=False)
+    df.to_csv(os.path.join(output_folder,output_file+"_BERTTopic_full_AssignedTopics.csv"), index=False)
 
 def bertTopicPerCol(df):
     # code for this function referenced heavily from: https://colab.research.google.com/drive/1BoQ_vakEVtojsd2x_U6-_x52OOuqruj2?usp=sharing#scrollTo=Fo-Oig4Yib5K
@@ -279,7 +265,7 @@ def bertTopicPerCol(df):
     #df.to_csv(os.path.join(output_folder,"New5t_BERTopic_AssignedTopics_PerColumn2.csv"), index=False)
     if all_topics_list:
         merged_topics_df = pd.concat(all_topics_list, ignore_index=True)
-        merged_topics_df.to_csv(os.path.join(output_folder,"NewLLama_Bertopic_topics*.csv"), index=False)
+        merged_topics_df.to_csv(os.path.join(output_folder,output_file+"_Bertopic_topics*.csv"), index=False)
 
 import pandas as pd
 
@@ -310,14 +296,37 @@ def evalTrajectories(df):
     results_df = pd.DataFrame.from_dict(results_dict, orient="index")
 
     # Save processed results
-    results_df.to_csv(os.path.join(output_folder,"NewLlama_LlamaGuard_TrajEvals*.csv"), index=False)
+    results_df.to_csv(os.path.join(output_folder,output_file"_LlamaGuard_TrajEvals*.csv"), index=False)
 
     #return results_df  # Return DataFrame if needed
 
-                
-##  call lda function
-bertTopicPerCol(df)
-bertTopicWholeConvo(df)
-ldaPerCol(df)
-ldaWholeConvo(df)
-evalTrajectories(df)
+
+if __name__ == "__main__":
+    # Make sure to set...
+        #  correct output folder name
+        #  correct outptt file name (will work for all functions as save results to csv) 
+        # correct dataframe to read in
+    
+    # set folder to output csv files to
+    output_folder = "Llama3TNewMethod"
+    output_file = "NewLlama"
+    os.makedirs(output_folder, exist_ok=True)
+    # download NLTK stopwords and punctuation
+    nltk.download("stopwords")
+    nltk.download("punkt")
+    # import pre-processed nlp model trained for pre-processing text
+    nlp = spacy.load("en_core_web_lg")
+
+    # read in csv of conversation rollouts as a pandas dataframe
+    #df = pd.read_csv("/home/allie11/ASTPrompter/DataFrames/Baseline/BigBaselineNewR.csv") 
+    #df = pd.read_csv("/home/allie11/ASTPrompter/5TBigBaseline.csv")
+    #df = pd.read_csv("/home/allie11/ASTPrompter/Dataframe New Method/BigNewMethod.csv") 
+    df = pd.read_csv("/home/allie11/ASTPrompter/NewLlamaTs.csv") 
+
+    # call topic modeling and llamaguard eval functions
+    bertTopicPerCol(df)
+    bertTopicWholeConvo(df)
+    ldaPerCol(df)
+    ldaWholeConvo(df)
+    evalTrajectories(df) # per column
+    print("Done")           
