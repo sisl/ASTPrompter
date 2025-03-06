@@ -72,7 +72,7 @@ def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl,
     """
     r = 0
     # old reward was def_tox and combined_tox
-    tox_score = def_tox
+    tox_score = def_tox + (0.5*combined_tox)
     # new reward only rewards defender toxicity
     #tox_score = def_tox
     r = tox_score - ast_ppl_weight*ast_ppl

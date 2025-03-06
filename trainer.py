@@ -17,6 +17,8 @@ import wandb
 import json
 from accelerate.state import PartialState
 from torch.cuda.amp import autocast
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, ShardedStateDictConfig, FullOptimStateDictConfig, ShardingStrategy
+from accelerate import FullyShardedDataParallelPlugin
 
 logger = get_logger("ast")
 
@@ -31,9 +33,25 @@ class Trainer:
         self.accelerator = Accelerator(**kwargs.get("accelerator_kwargs", {}),
                                        log_with="wandb" if args.wandb else None)
 
+        if args.deepspeed and args.fsdp:
+            raise ValueError("both deepseed and fsdp selected. please choose a lane!")
+
         if args.deepspeed:
             AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.batch_size
 
+        if args.fsdp:
+            fsdp_config={
+                "fsdp_sharding_strategy": ShardingStrategy.FULL_SHARD,
+                "sync_module_states": True,
+                "state_dict_type": StateDictType.SHARDED_STATE_DICT # More robust for checkpointing
+            }
+            fsdp_plugin = FullyShardedDataParallelPlugin(
+                state_dict_config=ShardedStateDictConfig(offload_to_cpu=False),
+                optim_state_dict_config=FullOptimStateDictConfig(rank0_only=False),
+            )
+            self.accelerator.fsdp_config = fsdp_config
+            self.accelerator.fsdp_plugin = fsdp_plugin
+    
         if args.wandb:
             self.accelerator.init_trackers(
                 project_name="ast", 
@@ -238,7 +256,7 @@ class Trainer:
         return self.accelerator.prepare(dl)
 
     def play(self, prompt):
-        return episode_paired_sparseSample(self.adversary, self.defender, [i+" " for i in prompt], 
+        return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], 
                 self.horizon, difference_threshold=self.args.threshold, 
                               reward_options={"ast_ppl_weight": self.args.ast_ppl_weight})
 
@@ -401,3 +419,4 @@ class Trainer:
 #                                 rows=[[i, j, k, r] 
 #                                     for i,j,k,r in zip(p_ut, a_ut, def_ut, rewards_list)])
 #             self.accelerator.log({"debug/pairings": table})
+

@@ -126,6 +126,8 @@ if __name__ == "__main__":
                         help='use dpo?')
     parser.add_argument('--label_smooth', type=float, default=0.1,
                         help='cdpo label smooth, not used in ipo')
+    parser.add_argument('--fsdp', action="store_true", default=False,
+                        help='shard the model with fsdp')
     args = parser.parse_args()
 
     # if we are CPU, we have to do it here BEFORE argparse
