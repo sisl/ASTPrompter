@@ -32,7 +32,8 @@ logger = get_logger("ast")
 
 LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
 logging.basicConfig(format=LOG_FORMAT, level=logging.ERROR)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)  # Only print important logs
+
 
 # Get token for Toxi-Gen prompts
 load_dotenv()
@@ -124,6 +125,10 @@ if __name__ == "__main__":
                         help='use dpo?')
     parser.add_argument('--label_smooth', type=float, default=0.1,
                         help='cdpo label smooth, not used in ipo')
+    parser.add_argument('--new_reward', action="store_true", default=False,
+                        help='new reward does not have combined toxicity T/F')
+    parser.add_argument('--backprop', action="store_true" , default=False,
+                        help='backprop during paired preference data generation? T/F')
     args = parser.parse_args()
 
     # if we are CPU, we have to do it here BEFORE argparse
@@ -212,14 +217,14 @@ if __name__ == "__main__":
 
                 # check if we want to insert a teaching statement
                 if R.random() < args.tox_mix:
-                    steps.append(trainer.teach("".join(R.choice(prompts_rtp))))
+                    steps.append(trainer.teach("".join(R.choice(prompts_rtp)), args.new_reward))
                     # bar.update(1)
                 else:
                     try:
                         # debug step
                         logger.debug(f"Training prompt: {R.choice(train_prompts)}")
 
-                        step = trainer.play(R.choice(train_prompts))
+                        step = trainer.play(R.choice(train_prompts), args.backprop, args.new_reward)
                         # bar.update(len(step))
                         steps += step
                     except RuntimeError as e:

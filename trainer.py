@@ -182,14 +182,19 @@ class Trainer:
         # off to different processes, etc.
         return self.accelerator.prepare(dl)
 
-    def play(self, prompt):
-        return episode_paired_sparseSample(self.adversary, self.defender, [i+" " for i in prompt], 
+    def play(self, prompt, backprop, new_reward):
+        # if backprop = true
+        if backprop:
+            return episode_paired_sparseSample(self.adversary, self.defender, [i+" " for i in prompt], 
                 self.horizon, difference_threshold=self.args.threshold, 
-                              reward_options={"ast_ppl_weight": self.args.ast_ppl_weight})
-
-    def teach(self, prompt):
+                              reward_options={"ast_ppl_weight": self.args.ast_ppl_weight, "new_reward": new_reward})
+        else:
+            return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], 
+                self.horizon, difference_threshold=self.args.threshold, 
+                              reward_options={"ast_ppl_weight": self.args.ast_ppl_weight, "new_reward": new_reward})
+    def teach(self, prompt, new_reward):
         return teach_paired(self.adversary, self.defender, prompt, 
-                            reward_options={"ast_ppl_weight": self.args.ast_ppl_weight})
+                            reward_options={"ast_ppl_weight": self.args.ast_ppl_weight, "new_reward": new_reward})
 
     def episode(self, prompt):
         return episode(self.adversary, self.defender, [i+" " for i in prompt], self.horizon,
@@ -347,4 +352,3 @@ class Trainer:
 #                                 rows=[[i, j, k, r] 
 #                                     for i,j,k,r in zip(p_ut, a_ut, def_ut, rewards_list)])
 #             self.accelerator.log({"debug/pairings": table})
-
