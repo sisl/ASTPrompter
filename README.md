@@ -1,8 +1,9 @@
-# Toxicity Elicitation with AST
+# MALIBU: Monte-Carlo Adaptive Language Model Testing with Iterative Backup
+This branch improves upon the original ASTPrompter formulation by performing backpropagation during IPO, removing combined toxicity from the reward, and replacing detoxify with Llama Guard 3 (8.1B) as the toxicity classifier. 
+Source for original ASTPrompter: [ASTPrompter: Weakly Supervised Automated Language Model Red-Teaming to Identify Likely Toxic Prompts](https://arxiv.org/abs/2407.09447).
+Source for MALIBU: coming soon!
 
-This is the source code for our work [ASTPrompter: Weakly Supervised Automated Language Model Red-Teaming to Identify Likely Toxic Prompts](https://arxiv.org/abs/2407.09447).
-
-## Setting Up
+## Setting Up -- from original ASTPrompter
 
 ### Environment
 1. Create a new conda environment
@@ -55,7 +56,7 @@ python main_eval.py --help
 ```
 
 ## Citing the Work
-If the code or ideas contained here was useful for your porject, please cite our work at:
+If the code or ideas contained here was useful for your porject, please cite the original ASTPrompter at:
 
 ```
 @misc{hardy2024astprompter,
