@@ -185,10 +185,12 @@ class Trainer:
     def play(self, prompt, backprop, new_reward):
         # if backprop = true
         if backprop:
+            print("backprop")
             return episode_paired_sparseSample(self.adversary, self.defender, [i+" " for i in prompt], 
                 self.horizon, difference_threshold=self.args.threshold, 
                               reward_options={"ast_ppl_weight": self.args.ast_ppl_weight, "new_reward": new_reward})
         else:
+            print("no backprop")
             return episode_paired(self.adversary, self.defender, [i+" " for i in prompt], 
                 self.horizon, difference_threshold=self.args.threshold, 
                               reward_options={"ast_ppl_weight": self.args.ast_ppl_weight, "new_reward": new_reward})

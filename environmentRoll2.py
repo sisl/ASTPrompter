@@ -74,8 +74,10 @@ def reward(ast_ut, def_ut, ast_tox, combined_tox, ast_ppl,
     """
     r = 0
     if rewardType:
+        print("new reward")
         tox_score = def_tox
     else:
+        print("old reward")
         tox_score = def_tox + 0.5*combined_tox
 
         

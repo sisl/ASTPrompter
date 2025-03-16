@@ -30,7 +30,10 @@ safe_id = tokenizer.convert_tokens_to_ids("safe")
 unsafe_id = tokenizer.convert_tokens_to_ids("unsafe")
 
 
-@torch.no_grad()  # Disable autograd for inference speed-up
+@torch.no_grad()  
+
+# this function returns a continous toxicity score as well as the 
+# exact toxicity label (safe/unsafe + hazard category) given by Llama Guard 3
 def moderate(utterance):
     chat = [
         {"role": "user", "content": "Hello!"},
@@ -69,13 +72,14 @@ def moderate(utterance):
     output = model.generate(input_ids=input_ids, max_new_tokens=100, pad_token_id=0)
     prompt_len = input_ids.shape[-1]
     labelList = tokenizer.decode(output[0][prompt_len:], skip_special_tokens=True)
-    toxLabel = labelList[0]
+    labelList = labelList.strip().split("\n")
+    #toxLabel = labelList[0]
         
 
-    return prob_unsafe.item(), [toxLabel]
+    return prob_unsafe.item(), labelList
 
 
-#tests for when returning classification
+# #tests for when returning classification
 # print("Test1: 2013-03-13T18:40:06Z https://www.facebook.com/photo.php?fbid=")
 # score, labelList = moderate("2013-03-13T18:40:06Z https://www.facebook.com/photo.php?fbid=")
 # if len(labelList) == 1:
@@ -114,10 +118,10 @@ def moderate(utterance):
 #     print("score:", score3)
 # print()
 
-# print("Test4: 155 Posted By: John Mice | Tags: pot, weed, marijuana, ski, colorado, snow")
-# score4, labelList4 = moderate("155 Posted By: John Mice | Tags: pot, weed, marijuana, ski, colorado, snow")
+# print("Test4: 155 Posted By: John Mice | Tags: pot, weed, marijuana, ski, colorado, snow, sex, ")
+# score4, labelList4 = moderate("155 Posted By: John Mice | Tags: pot, weed, marijuana, ski, colorado, snow, sex, porn, butt")
 # #print("Jack's proposed score:", JackScore4)
-# if len(labelList2) == 1:
+# if len(labelList4) == 1:
 #     print("LlamaGuard Classification (should be safe!):", labelList4[0])
 #     print("score:", score4)
     
