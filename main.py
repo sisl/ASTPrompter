@@ -79,9 +79,9 @@ if __name__ == "__main__":
 
     # establish the arguments of this system
     parser = argparse.ArgumentParser(description='AST Trainer')
-    parser.add_argument('--epochs', type=int, default=10000,
+    parser.add_argument('--epochs', type=int, default=100000,
                         help='number of epochs to train')
-    parser.add_argument('--batch_size', type=int, default=8,
+    parser.add_argument('--batch_size', type=int, default=1, # PLEASE WORK
                         help='each batch will be batch_size*accumulate_steps')
     parser.add_argument('--horizon', type=int, default=3,
                         help='how many turns to self-play')
@@ -89,13 +89,13 @@ if __name__ == "__main__":
                         help='for how many EPISODES do we mix in a single toxicity prompt?')
     parser.add_argument('--threshold', type=float, default=0,
                         help='how different does a pair have to be to count?')
-    parser.add_argument('--experience_size', type=int, default=512,
+    parser.add_argument('--experience_size', type=int, default=64,
                         help='how many experience samples to collect per epoch?')
     parser.add_argument('--lr', type=float, default=5e-7,
                         help='learning rate')
     parser.add_argument('--beta', type=float, default=0.01,
                         help='IPO/DPO beta')
-    parser.add_argument('--accumulate_steps', type=int, default=1,
+    parser.add_argument('--accumulate_steps', type=int, default=8,
                         help='gradient accumulation steps')
     parser.add_argument('--max_gradient_norm', type=float, default=10,
                         help='maximum gradient norm to clip to')
@@ -103,9 +103,9 @@ if __name__ == "__main__":
                         help='number of warmup steps')
     parser.add_argument('--ast_ppl_weight', type=float, default=0.1,
                         help='the weight on the perplexity term, higher means more likely')
-    parser.add_argument('--eval_every', type=int, default=10,
+    parser.add_argument('--eval_every', type=int, default=16,
                         help='evaluate model every this many epochs')
-    parser.add_argument('--total_steps', type=int, default=10000,
+    parser.add_argument('--total_steps', type=int, default=80000,
                         help='total steps to train')
     parser.add_argument('--save_dir', type=str, default='models',
                         help='prefix of the model save dir, default "models"')
@@ -129,6 +129,8 @@ if __name__ == "__main__":
                         help='new reward does not have combined toxicity T/F')
     parser.add_argument('--backprop', action="store_true" , default=False,
                         help='backprop during paired preference data generation? T/F')
+    parser.add_argument('--fsdp', action="store_true", default=False,
+                        help='shard the model with fsdp')
     args = parser.parse_args()
 
     # if we are CPU, we have to do it here BEFORE argparse
@@ -181,7 +183,8 @@ if __name__ == "__main__":
     best_score = meta.get("best", float("-inf"))
     while epoch < args.epochs:
         logger.info(f"EPOCH {epoch} starting...")
-        trainer.save("checkpoint", {"epoch": epoch, "best": best_score})
+        if epoch % 4 == 3:
+            trainer.save("checkpoint", {"epoch": epoch, "best": best_score})
 
         if epoch % args.eval_every == 0 and epoch != 0:
             logger.info(f"EVALUATING...")
@@ -190,7 +193,7 @@ if __name__ == "__main__":
                 if indx % 30 == 0:
                     logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
                 rewards += [j.reward_w for j in trainer.episode(i)]
-            logger.debug(f"EVAULATED {indx}/{len(dev_prompts)} steps...")
+            logger.debug(f"EVAULATED {indx}/{min(len(dev_prompts), 60)} steps...")
             dev_score = sum(rewards)/len(rewards)
 
             if dev_score > best_score:

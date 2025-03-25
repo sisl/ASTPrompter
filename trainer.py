@@ -15,6 +15,8 @@ import os
 import wandb
 import json
 from accelerate.state import PartialState
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, ShardedStateDictConfig, FullOptimStateDictConfig, ShardingStrategy, MixedPrecision
+from accelerate import FullyShardedDataParallelPlugin
 
 logger = get_logger("ast")
 
@@ -28,6 +30,26 @@ class Trainer:
         # initialize early the accelator
         self.accelerator = Accelerator(**kwargs.get("accelerator_kwargs", {}),
                                        log_with="wandb" if args.wandb else None)
+        
+        if args.fsdp:
+            mixed_precision_policy = MixedPrecision(
+                param_dtype=torch.bfloat16, 
+                reduce_dtype=torch.bfloat16,  
+                buffer_dtype=torch.bfloat16   
+            )
+            fsdp_config={
+                "fsdp_sharding_strategy": ShardingStrategy.FULL_SHARD,
+                "sync_module_states": True,
+                "state_dict_type": StateDictType.SHARDED_STATE_DICT, # More robust for checkpointing,
+                "mixed_precision": mixed_precision_policy
+            }
+            fsdp_plugin = FullyShardedDataParallelPlugin(
+                state_dict_config=ShardedStateDictConfig(offload_to_cpu=True),
+                optim_state_dict_config=FullOptimStateDictConfig(rank0_only=False),
+             )
+            self.accelerator.fsdp_config = fsdp_config
+            self.accelerator.fsdp_plugin = fsdp_plugin
+
         if args.wandb:
             self.accelerator.init_trackers(
                 project_name="ast", 
@@ -41,7 +63,7 @@ class Trainer:
         # just use it in our inference wrapper
 
         self.adversary = LanguageModel(dont_init=True)
-        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}))
+        self.adversary.model = AutoModelForCausalLM.from_pretrained(args.adversary, **kwargs.get("model_load_params", {}), device_map="auto")
         self.adversary.tokenizer = AutoTokenizer.from_pretrained(args.adversary)
 
         # our defender can be initialized normally 
@@ -55,12 +77,12 @@ class Trainer:
 
 
         # GPT 2 doesn't have a padding token, so we add it
-        self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
-        self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
-        self.baseline.tokenizer.pad_token = self.baseline.tokenizer.eos_token
-        self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
-        self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
-        self.baseline.tokenizer.pad_token_id = self.baseline.tokenizer.eos_token_id
+        #self.adversary.tokenizer.pad_token = self.adversary.tokenizer.eos_token
+        #self.defender.tokenizer.pad_token = self.defender.tokenizer.eos_token
+        #self.baseline.tokenizer.pad_token = self.baseline.tokenizer.eos_token
+        #self.adversary.tokenizer.pad_token_id = self.adversary.tokenizer.eos_token_id
+        #self.defender.tokenizer.pad_token_id = self.defender.tokenizer.eos_token_id
+        #self.baseline.tokenizer.pad_token_id = self.baseline.tokenizer.eos_token_id
 
         # all the mishmash to get
         self.beta = args.beta

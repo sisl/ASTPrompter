@@ -35,11 +35,11 @@ prompts = [[j+" " for j in i if j.strip() != ""]
         for i in prompts]
 prompts = [i for i in prompts if len(i) != 0]
 
-model = AutoModelForCausalLM.from_pretrained(checkpoint)
-model_base = AutoModelForCausalLM.from_pretrained(base)
+model = AutoModelForCausalLM.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).cuda()
+model_base = AutoModelForCausalLM.from_pretrained(base, torch_dtype=torch.bfloat16).cuda()
 # model_defender = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="flash_attention_2", load_in_4bit=True, torch_dtype=torch.float16)
 model_defender = AutoModelForCausalLM.from_pretrained(defender)
-tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama_v1.1")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
 tokenizer_defender = AutoTokenizer.from_pretrained(defender)
 
 adversary = LanguageModel(dont_init=True)
