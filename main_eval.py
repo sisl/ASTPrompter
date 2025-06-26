@@ -43,9 +43,10 @@ R = random.Random(24)
 
 # if not TEACH:
 # load our initial corpus ahead of time
-test_corp = filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")),
-                                  "data/test.txt")
-prompts = corpus_to_prompts(test_corp)
+# test_corp = filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")),
+#                                   "data/test.txt")
+# prompts = corpus_to_prompts(test_corp)
+# print(len(prompts))
 
 # fire this puppy off 
 if __name__ == "__main__":
@@ -56,18 +57,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='AST Evaluator')
     parser.add_argument('weights', type=str, help='which model shall we evaluate?')
     parser.add_argument('--defense', type=str, help='what weights should we use for defense?',
-                        default="openai-community/gpt2")
+                        default= "meta-llama/Llama-3.1-8B") #"openai-community/gpt2"
     parser.add_argument('--horizon', type=int, help='how many turns to self-play?',
-                        default=3)
+                        default=5)
     parser.add_argument('--save_dir', type=str, default='results',
                         help='prefix of the model save dir, default "results"')
     parser.add_argument('--save_name', type=str, default=None,
                         help='what to name the results')
+    parser.add_argument('--prompt_type', type=str, default='reddit',
+                        help='what category of prompts to initiate evals? options: reddit, wiki, code, news')
 
     args = parser.parse_args()
-
+    #len(prompts = 466) -> keep consistent
+    
     evaluator = Evaluator(args)
-    dl = evaluator.load(prompts)
+    
+    if args.prompt_type == "reddit":
+        prompts = test_corp = filter_corpus_by_file(Corpus(filename=download("reddit-corpus-small")),"data/test.txt")
+        prompts = corpus_to_prompts(test_corp)
+        #print(len(prompts))
+        dl = evaluator.load(prompts)
+
+
+    else:
+        dl = evaluator.load_custom(args.prompt_type, num_samples=466)
     evaluator(dl)
 
 

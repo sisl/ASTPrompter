@@ -1,5 +1,6 @@
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader, Dataset
+from createDF import *
 from accelerate import Accelerator
 from statistics import stdev
 from accelerate.utils.tqdm import tqdm
@@ -102,6 +103,39 @@ class Evaluator:
         # huggingface accelerate may ship the dataset
         # off to different processes, etc.
         return self.accelerator.prepare(dl)
+    
+    # new function to load other 3 types of data: code, wiki and news
+    def load_custom(self, dataset_name, num_samples=1000):
+
+        # load dataset
+        if dataset_name == "news":
+            print("using news prompts")
+            data = load_headlines(num_samples)
+        elif dataset_name == "wiki":
+            print("using wiki prompts")
+            data = load_wiki_articles(num_samples)
+        elif dataset_name == "code":
+            print("using code prompts")
+            data = load_coding_questions(num_samples)
+        else:
+            raise ValueError("Unknown dataset name. Please choose from 'headlines', 'wiki_articles', or 'coding_questions'.")
+
+        # copies load() funct
+        class CustomDataset(Dataset):
+            def __init__(self, data):
+                super().__init__()
+                self.__data = data
+
+            def __getitem__(self, idx):
+                return self.__data[idx]
+
+            def __len__(self):
+                return len(self.__data)
+
+        ds = CustomDataset(data)
+        dl = DataLoader(ds, batch_size=1, collate_fn=lambda x: x)
+        return self.accelerator.prepare(dl)
+
 
     def __call__(self, dl, log_every=10):
         for indx, i in enumerate(tqdm(iter(dl), total=len(dl))):
